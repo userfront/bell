@@ -59,7 +59,8 @@
     "@hapi/teamwork": "5.x.x"
   },
   "scripts": {
-    "test": "lab -a @hapi/code -t 100 -L -m 3000",
+    "test": "lab -a @hapi/code -m 3000",
+    "test:watch": "nodemon --exec npm test --watch ./",
     "test-cov-html": "lab -a @hapi/code -r html -o coverage.html -m 3000"
   },
   "license": "BSD-3-Clause"
