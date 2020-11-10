@@ -1,6 +1,6 @@
 'use strict'
 
-const Bell = require('..')
+const Bell = require('../lib')
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
 const Hapi = require('@hapi/hapi')
@@ -9,15 +9,14 @@ const Lab = require('@hapi/lab')
 
 const Constants = require('./constants.json')
 const Mock = require('./mock')
-
-const internals = {}
+const { request } = require('@hapi/wreck')
 
 const { describe, it } = (exports.lab = Lab.script())
 const expect = Code.expect
 
 const privateKey = Constants.privateKey
 
-describe('Bell', () => {
+describe.only('Bell', () => {
   it('authenticates an endpoint via oauth', async flags => {
     const mock = await Mock.v1(flags)
     const server = Hapi.server({ host: 'localhost', port: 8080 })
@@ -341,6 +340,46 @@ describe('Bell', () => {
   })
 
   describe('simulate()', () => {
+    it('authenticates an endpoint via oauth', async () => {
+      Bell.simulate(request => {
+        return { some: 'value' }
+      })
+
+      const server = Hapi.server()
+      await server.register(Bell)
+
+      server.auth.strategy('twitter', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'test',
+        clientSecret: 'secret',
+        provider: 'twitter',
+      })
+
+      server.route({
+        method: '*',
+        path: '/login',
+        options: {
+          auth: 'twitter',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const res = await server.inject('/login?next=%2Fhome')
+      expect(res.result).to.equal({
+        provider: 'twitter',
+        token: 'oauth_token',
+        query: {
+          next: '/home',
+        },
+        secret: 'token_secret',
+        some: 'value',
+      })
+
+      Bell.simulate(false)
+    })
     it('authenticates an endpoint via oauth', async () => {
       Bell.simulate(request => {
         return { some: 'value' }
