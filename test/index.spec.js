@@ -102,6 +102,25 @@ describe.only('Bell', () => {
       isSecure: false,
       clientId: 'test',
       clientSecret: 'secret',
+      clientFunction: (request, settings) => {
+        // console.log(`request.state`, request.state)
+        // console.log(`request.query`, request.query)
+        console.log(`clientFunction()`)
+
+        if (
+          request.state &&
+          request.state[settings.cookie] &&
+          request.state[settings.cookie].tenantId
+        ) {
+          // Use tenantId from cookie if exists
+          const tenantId = request.state[settings.cookie].tenantId
+          settings.clientId = `${tenantId}-client-id`
+          settings.clientSecret = `${tenantId}-client-secret`
+        } else {
+          // Use tenantId from request query (this is the initial authorization request)
+          settings.clientId = `${request.query.tenant_id}-client-id`
+        }
+      },
       provider: mock.provider,
     })
 
@@ -116,11 +135,11 @@ describe.only('Bell', () => {
       },
     })
 
-    const res1 = await server.inject('/login')
-    // const res1 = await server.inject('/login?tenant_id=abcd1234')
+    const tenantId = 'abcd1234'
+    const res1 = await server.inject(`/login?tenant_id=${tenantId}`)
     expect(res1.headers.location).to.contain(
       mock.uri +
-        '/auth?client_id=test&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state='
+        `/auth?client_id=${tenantId}-client-id&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
     )
     const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
