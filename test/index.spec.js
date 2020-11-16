@@ -1,21 +1,21 @@
 'use strict'
 
-const Bell = require('../lib')
+const nock = require('nock')
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
 const Hapi = require('@hapi/hapi')
 const Hoek = require('@hapi/hoek')
 const Lab = require('@hapi/lab')
 
+const Bell = require('../lib')
 const Constants = require('./constants.json')
 const Mock = require('./mock')
 
+const privateKey = Constants.privateKey
 const { describe, it } = (exports.lab = Lab.script())
 const expect = Code.expect
 
-const privateKey = Constants.privateKey
-
-describe.only('Bell', () => {
+describe('Bell', () => {
   it('authenticates an endpoint via oauth', async flags => {
     const mock = await Mock.v1(flags)
     const server = Hapi.server({ host: 'localhost', port: 8080 })
@@ -92,7 +92,7 @@ describe.only('Bell', () => {
     expect(res3.result.query.next).to.equal('/home')
   })
 
-  it.only('authenticates an endpoint via oauth2', async flags => {
+  it('authenticates an endpoint via oauth2', async flags => {
     const mock = await Mock.v2(flags)
     const server = Hapi.server({ host: 'localhost', port: 8080 })
     await server.register(Bell)
@@ -102,23 +102,50 @@ describe.only('Bell', () => {
       isSecure: false,
       clientId: 'test',
       clientSecret: 'secret',
-      clientFunction: (request, settings) => {
-        // console.log(`request.state`, request.state)
-        // console.log(`request.query`, request.query)
-        console.log(`clientFunction()`)
+      provider: mock.provider,
+    })
 
+    server.route({
+      method: 'GET',
+      path: '/login',
+      options: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
+
+    const res1 = await server.inject('/login')
+    expect(res1.headers.location).to.contain(
+      mock.uri +
+        `/auth?client_id=test&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
+    )
+  })
+
+  it('authenticates an endpoint via oauth2 with third party provider credentials via hooks', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 8080 })
+    await server.register(Bell)
+
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'test',
+      clientSecret: 'secret',
+      preAuthorizationHook: (request, settings) => {
+        settings.clientId = `${request.query.tenant_id}-client-id`
+      },
+      postAuthorizationHook: (request, settings) => {
+        // Use tenantId from cookie if exists
         if (
           request.state &&
           request.state[settings.cookie] &&
           request.state[settings.cookie].tenantId
         ) {
-          // Use tenantId from cookie if exists
           const tenantId = request.state[settings.cookie].tenantId
           settings.clientId = `${tenantId}-client-id`
           settings.clientSecret = `${tenantId}-client-secret`
-        } else {
-          // Use tenantId from request query (this is the initial authorization request)
-          settings.clientId = `${request.query.tenant_id}-client-id`
         }
       },
       provider: mock.provider,
@@ -146,8 +173,21 @@ describe.only('Bell', () => {
     const res2 = await mock.server.inject(res1.headers.location)
     expect(res2.headers.location).to.contain('http://localhost:8080/login?code=1&state=')
 
+    const url = new URL(res1.headers.location)
+    const scope = nock(url.origin)
+      .persist()
+      .post('/token', body => {
+        // Assert clientId & clientSecret were modified
+        expect(body.client_id).to.equal(`${tenantId}-client-id`)
+        expect(body.client_secret).to.equal(`${tenantId}-client-secret`)
+        return true
+      })
+      .reply(200)
+
     const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
     expect(res3.result.provider).to.equal('custom')
+
+    expect(scope.pendingMocks()).to.equal([])
   })
 
   it('authenticates an endpoint via oauth2 and basic authentication', async flags => {
@@ -264,199 +304,6 @@ describe.only('Bell', () => {
     const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
     expect(res3.result.provider).to.equal('custom')
     expect(res3.result.token).to.equal('mycustomtoken')
-  })
-
-  it('authenticates an endpoint via oauth2 with third party credentials', async flags => {
-    const tenantId = 'abcd1234'
-    const clientId = 'tenant-1-google-client-id'
-    const clientSecret = 'tenant-1-google-client-secret'
-
-    const mock = await Mock.v2(flags, true) // Sets useParamsAuth = true
-    const server = Hapi.server({ host: 'localhost', port: 8080 })
-    await server.register(Bell)
-
-    server.auth.strategy('custom', 'bell', {
-      password: 'cookie_encryption_password_secure',
-      isSecure: false,
-      clientId: 'customClientId',
-      clientSecret: { headers: { mycustomtoken: 'mycustomtoken' } },
-      clientFunction: (request, settings) => {
-        // console.log(`\nclientFunction request`, request.query)
-        // console.log(`clientFunction settings`, settings)
-
-        // If there is no code, we know we're making the first request to the third party
-        if (!request.code) {
-          // Imitate DB lookup for tenant's client ID & secret
-          // const tenant = await Tenant.findOne({ id: request.query.tenant_id })
-          const tenant = {
-            name: 'tenant 11',
-            sso: {
-              google: {
-                clientId,
-                clientSecret,
-              },
-            },
-          }
-
-          // console.log(`0settings`, settings)
-
-          settings.clientId = tenant.sso.google.clientId
-          settings.clientSecret = tenant.sso.google.clientSecret
-        }
-
-        // console.log(`1settings`, settings)
-      },
-      provider: mock.provider,
-    })
-
-    server.route({
-      method: '*',
-      path: '/login',
-      options: {
-        auth: 'custom',
-        handler: function (request, h) {
-          return request.auth.credentials
-        },
-      },
-    })
-
-    const res1 = await server.inject(`/login?tenant_id=${tenantId}`)
-    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-    expect(res1.headers.location).to.contain(
-      mock.uri +
-        `/auth?client_id=${clientId}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
-    )
-
-    const res2 = await mock.server.inject(res1.headers.location)
-    expect(res2.headers.location).to.contain('http://localhost:8080/login?code=1&state=')
-    console.log('res2.headers.location', res2.headers.location)
-
-    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
-    expect(res3.result.provider).to.equal('custom')
-    console.log('res3.result', res3.result)
-    expect(res3.result.token).to.equal(clientSecret)
-  })
-
-  it('1', async flags => {
-    const tenantId = 'abcd1234'
-    const clientId = 'tenant-1-google-client-id'
-    const clientSecret = 'tenant-1-google-client-secret'
-
-    const mock = await Mock.v2(flags, true) // Sets useParamsAuth = true
-    const server = Hapi.server({ host: 'localhost', port: 8080 })
-    await server.register(Bell)
-
-    server.auth.strategy('custom', 'bell', {
-      password: 'cookie_encryption_password_secure',
-      isSecure: false,
-      clientId: 'customClientId',
-      clientSecret: { headers: { mycustomtoken: 'mycustomtoken' } },
-      clientFunction: (request, settings) => {
-        console.log(`\nclientFunction request`, request.query)
-        // console.log(`clientFunction settings`, settings)
-
-        // console.log(`1settings`, settings)
-      },
-      provider: mock.provider,
-    })
-
-    server.route({
-      method: '*',
-      path: '/login',
-      options: {
-        auth: 'custom',
-        handler: function (request, h) {
-          return request.auth.credentials
-        },
-      },
-    })
-
-    const res1 = await server.inject(`/login?tenant_id=${tenantId}`)
-    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-    expect(res1.headers.location).to.contain(
-      mock.uri +
-        `/auth?client_id=customClientId&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
-    )
-
-    const res2 = await mock.server.inject(res1.headers.location)
-    expect(res2.headers.location).to.contain('http://localhost:8080/login?code=1&state=')
-    console.log('res2.headers.location', res2.headers.location)
-
-    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
-    expect(res3.result.provider).to.equal('custom')
-    console.log('res3.result', res3.result)
-    expect(res3.result.token).to.equal(clientSecret)
-  })
-
-  it('2', async flags => {
-    const tenantId = 'abcd1234'
-    const clientId = 'tenant-1-google-client-id'
-    const clientSecret = 'tenant-1-google-client-secret'
-
-    const mock = await Mock.v2(flags, true) // Sets useParamsAuth = true
-    const server = Hapi.server({ host: 'localhost', port: 8080 })
-    await server.register(Bell)
-
-    server.auth.strategy('custom', 'bell', {
-      password: 'cookie_encryption_password_secure',
-      isSecure: false,
-      clientId: 'customClientId',
-      clientSecret: { headers: { mycustomtoken: 'mycustomtoken' } },
-      clientFunction: (request, settings) => {
-        // console.log(`\nclientFunction request`, request.query)
-        // console.log(`clientFunction settings`, settings)
-
-        // If there is no code, we know we're making the first request to the third party
-        if (!request.code) {
-          // Imitate DB lookup for tenant's client ID & secret
-          // const tenant = await Tenant.findOne({ id: request.query.tenant_id })
-          const tenant = {
-            name: 'tenant 11',
-            sso: {
-              google: {
-                clientId,
-                clientSecret,
-              },
-            },
-          }
-
-          // console.log(`0settings`, settings)
-
-          settings.clientId = tenant.sso.google.clientId
-          settings.clientSecret = tenant.sso.google.clientSecret
-        }
-
-        // console.log(`1settings`, settings)
-      },
-      provider: mock.provider,
-    })
-
-    server.route({
-      method: '*',
-      path: '/login',
-      options: {
-        auth: 'custom',
-        handler: function (request, h) {
-          return request.auth.credentials
-        },
-      },
-    })
-
-    const res1 = await server.inject(`/login?tenant_id=${tenantId}`)
-    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-    expect(res1.headers.location).to.contain(
-      mock.uri +
-        `/auth?client_id=${clientId}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
-    )
-
-    const res2 = await mock.server.inject(res1.headers.location)
-    expect(res2.headers.location).to.contain('http://localhost:8080/login?code=1&state=')
-    console.log('res2.headers.location', res2.headers.location)
-
-    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
-    expect(res3.result.provider).to.equal('custom')
-    console.log('res3.result', res3.result)
-    expect(res3.result.token).to.equal(clientSecret)
   })
 
   it('overrides cookie name', async flags => {

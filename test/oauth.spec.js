@@ -1,22 +1,21 @@
 'use strict'
 
 const Crypto = require('crypto')
-
-const Bell = require('../lib')
+const sinon = require('sinon')
+const nock = require('nock')
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
 const Hapi = require('@hapi/hapi')
 const Hoek = require('@hapi/hoek')
 const Lab = require('@hapi/lab')
 
+const Bell = require('../lib')
 const OAuth = require('../lib/oauth')
-
 const Mock = require('./mock')
+const privateKey = require('./constants.json').privateKey
 
 const { describe, it } = (exports.lab = Lab.script())
 const expect = Code.expect
-
-const privateKey = require('./constants.json').privateKey
 
 describe('Bell', () => {
   describe('v1()', () => {
@@ -2374,21 +2373,138 @@ describe('Bell', () => {
     })
   })
 
-  describe('Client', () => {
+  // Currently only supported by OAuth.v2
+  describe('hooks', () => {
+    it('calls preAuthorizationHook if present', async flags => {
+      const mock = await Mock.v2(flags)
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
+      })
+      await server.register(Bell)
+
+      const tenantId = 'abcd1234'
+
+      const strategyOptions = {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'test',
+        clientSecret: 'secret',
+        preAuthorizationHook: (request, settings) => {
+          settings.clientId = `${request.query.tenant_id}-client-id`
+        },
+        provider: mock.provider,
+      }
+
+      const spy = sinon.spy(strategyOptions, 'preAuthorizationHook')
+
+      server.auth.strategy('custom', 'bell', strategyOptions)
+      server.route({
+        method: '*',
+        path: '/login',
+        options: {
+          auth: 'custom',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const res = await server.inject(`/login?tenant_id=${tenantId}`)
+
+      // Assert client ID was modified
+      expect(res.headers.location).to.contain(
+        mock.uri +
+          `/auth?client_id=${tenantId}-client-id&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
+      )
+
+      // Assert preAuthorizationHook was called
+      expect(spy.calledOnce).to.equal(true)
+    })
+
+    it('calls postAuthorizationHook if present', async flags => {
+      const mock = await Mock.v2(flags)
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
+      })
+      await server.register(Bell)
+
+      const strategyOptions = {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'test',
+        clientSecret: 'secret',
+        postAuthorizationHook: (request, settings) => {
+          // Use tenantId from cookie if exists
+          if (
+            request.state &&
+            request.state[settings.cookie] &&
+            request.state[settings.cookie].tenantId
+          ) {
+            const tenantId = request.state[settings.cookie].tenantId
+            settings.clientId = `${tenantId}-client-id`
+            settings.clientSecret = `${tenantId}-client-secret`
+          }
+        },
+        provider: mock.provider,
+      }
+
+      const spy = sinon.spy(strategyOptions, 'postAuthorizationHook')
+
+      server.auth.strategy('custom', 'bell', strategyOptions)
+      server.route({
+        method: '*',
+        path: '/login',
+        options: {
+          auth: 'custom',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const tenantId = 'abcd1234'
+      const res1 = await server.inject(`/login?tenant_id=${tenantId}`)
+      expect(res1.headers.location).to.contain(
+        mock.uri +
+          '/auth?client_id=test&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state='
+      )
+      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+      const res2 = await mock.server.inject(res1.headers.location)
+      expect(res2.headers.location).to.contain('http://localhost:8080/login?code=1&state=')
+
+      // Mock the POST request that obtains the authorization token
+      const url = new URL(res1.headers.location)
+      const scope = nock(url.origin)
+        .persist()
+        .post('/token', body => {
+          // Assert clientId & clientSecret were modified
+          expect(body.client_id).to.equal(`${tenantId}-client-id`)
+          expect(body.client_secret).to.equal(`${tenantId}-client-secret`)
+          return true
+        })
+        .reply(200)
+
+      const res3 = await server.inject({
+        url: res2.headers.location,
+        headers: { cookie },
+      })
+      expect(res3.statusCode).to.equal(200)
+
+      // Assert postAuthorizationHook was called
+      expect(spy.calledOnce).to.equal(true)
+      expect(scope.pendingMocks()).to.equal([])
+    })
+  })
+
+  describe('Client (v1 only)', () => {
     it('accepts empty client secret', () => {
       const client = new OAuth.Client({
         provider: Bell.providers.twitter(),
       })
       expect(client.settings.clientSecret).to.equal('&')
-    })
-
-    it('accepts clientFunction', () => {
-      const fn = () => {}
-      const client = new OAuth.Client({
-        provider: Bell.providers.twitter(),
-        clientFunction: fn,
-      })
-      expect(client.settings.clientFunction).to.equal(fn)
     })
 
     describe('_request()', () => {

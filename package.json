@@ -56,7 +56,9 @@
     "@hapi/hapi": "20.x.x",
     "@hapi/hawk": "8.x.x",
     "@hapi/lab": "24.x.x",
-    "@hapi/teamwork": "5.x.x"
+    "@hapi/teamwork": "5.x.x",
+    "nock": "^13.0.5",
+    "sinon": "^9.2.1"
   },
   "scripts": {
     "test": "lab -a @hapi/code -m 3000",
