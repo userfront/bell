@@ -1,260 +1,251 @@
-'use strict';
+'use strict'
 
-const Bell = require('../..');
-const Code = require('@hapi/code');
-const Hapi = require('@hapi/hapi');
-const Hoek = require('@hapi/hoek');
-const Lab = require('@hapi/lab');
+const Bell = require('../..')
+const Code = require('@hapi/code')
+const Hapi = require('@hapi/hapi')
+const Hoek = require('@hapi/hoek')
+const Lab = require('@hapi/lab')
 
-const Mock = require('../mock');
+const Mock = require('../mock')
 
+const internals = {}
 
-const internals = {};
-
-
-const { describe, it } = exports.lab = Lab.script();
-const expect = Code.expect;
-
+const { describe, it } = (exports.lab = Lab.script())
+const expect = Code.expect
 
 describe('facebook', () => {
+  it('authenticates with mock', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-    it('authenticates with mock', async (flags) => {
+    const custom = Bell.providers.facebook()
+    Hoek.merge(custom, mock.provider)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const profile = {
+      id: '1234567890',
+      username: 'steve',
+      name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+      picture: {
+        data: {
+          is_silhouette: false,
+          url: 'https://example.com/profile.png',
+        },
+      },
+    }
 
-        const custom = Bell.providers.facebook();
-        Hoek.merge(custom, mock.provider);
+    Mock.override('https://graph.facebook.com/v3.1/me', profile)
 
-        const profile = {
-            id: '1234567890',
-            username: 'steve',
-            name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com',
-            picture: {
-                data: {
-                    is_silhouette: false,
-                    url: 'https://example.com/profile.png'
-                }
-            }
-        };
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'facebook',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        Mock.override('https://graph.facebook.com/v3.1/me', profile);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'facebook',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile: {
+        id: '1234567890',
+        username: 'steve',
+        displayName: 'steve',
+        name: {
+          first: 'steve',
+          last: 'smith',
+          middle: undefined,
+        },
+        email: 'steve@example.com',
+        picture: {
+          data: {
+            is_silhouette: false,
+            url: 'https://example.com/profile.png',
+          },
+        },
+        raw: profile,
+      },
+    })
+  })
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+  it('authenticates with mock (with custom fields)', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    const custom = Bell.providers.facebook({
+      fields: 'id,name,email,first_name,last_name,middle_name,picture',
+    })
+    Hoek.merge(custom, mock.provider)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                username: 'steve',
-                displayName: 'steve',
-                name: {
-                    first: 'steve',
-                    last: 'smith',
-                    middle: undefined
-                },
-                email: 'steve@example.com',
-                picture: {
-                    data: {
-                        is_silhouette: false,
-                        url: 'https://example.com/profile.png'
-                    }
-                },
-                raw: profile
-            }
-        });
-    });
+    const profile = {
+      id: '1234567890',
+      username: 'steve',
+      name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+      picture: {
+        data: {
+          is_silhouette: false,
+          url: 'https://example.com/profile.png',
+        },
+      },
+    }
 
-    it('authenticates with mock (with custom fields)', async (flags) => {
+    Mock.override('https://graph.facebook.com/v3.1/me', profile)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'facebook',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const custom = Bell.providers.facebook({ fields: 'id,name,email,first_name,last_name,middle_name,picture' });
-        Hoek.merge(custom, mock.provider);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const profile = {
-            id: '1234567890',
-            username: 'steve',
-            name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com',
-            picture: {
-                data: {
-                    is_silhouette: false,
-                    url: 'https://example.com/profile.png'
-                }
-            }
-        };
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        Mock.override('https://graph.facebook.com/v3.1/me', profile);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'facebook',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile: {
+        id: '1234567890',
+        username: 'steve',
+        displayName: 'steve',
+        name: {
+          first: 'steve',
+          last: 'smith',
+          middle: undefined,
+        },
+        email: 'steve@example.com',
+        picture: {
+          data: {
+            is_silhouette: false,
+            url: 'https://example.com/profile.png',
+          },
+        },
+        raw: profile,
+      },
+    })
+  })
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+  it('authenticates with mock (with custom scope)', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const custom = Bell.providers.facebook({ scope: ['email', 'user-birthday'] })
+    Hoek.merge(custom, mock.provider)
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    const profile = {
+      id: '1234567890',
+      username: 'steve',
+      name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+      picture: {
+        data: {
+          is_silhouette: false,
+          url: 'https://example.com/profile.png',
+        },
+      },
+    }
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    Mock.override('https://graph.facebook.com/v3.1/me', profile)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                username: 'steve',
-                displayName: 'steve',
-                name: {
-                    first: 'steve',
-                    last: 'smith',
-                    middle: undefined
-                },
-                email: 'steve@example.com',
-                picture: {
-                    data: {
-                        is_silhouette: false,
-                        url: 'https://example.com/profile.png'
-                    }
-                },
-                raw: profile
-            }
-        });
-    });
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'facebook',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-    it('authenticates with mock (with custom scope)', async (flags) => {
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const res1 = await server.inject('/login')
 
-        const custom = Bell.providers.facebook({ scope: ['email', 'user-birthday'] });
-        Hoek.merge(custom, mock.provider);
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        const profile = {
-            id: '1234567890',
-            username: 'steve',
-            name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com',
-            picture: {
-                data: {
-                    is_silhouette: false,
-                    url: 'https://example.com/profile.png'
-                }
-            }
-        };
+    const res2 = await mock.server.inject(res1.headers.location)
+    expect(res2.request.query.scope).to.be.equals('email,user-birthday')
 
-        Mock.override('https://graph.facebook.com/v3.1/me', profile);
-
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'facebook',
-            clientSecret: 'secret',
-            provider: custom
-        });
-
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
-
-                    return request.auth.credentials;
-                }
-            }
-        });
-
-        const res1 = await server.inject('/login');
-
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
-
-        const res2 = await mock.server.inject(res1.headers.location);
-        expect(res2.request.query.scope).to.be.equals('email,user-birthday');
-
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                username: 'steve',
-                displayName: 'steve',
-                name: {
-                    first: 'steve',
-                    last: 'smith',
-                    middle: undefined
-                },
-                email: 'steve@example.com',
-                picture: {
-                    data: {
-                        is_silhouette: false,
-                        url: 'https://example.com/profile.png'
-                    }
-                },
-                raw: profile
-            }
-        });
-    });
-
-});
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile: {
+        id: '1234567890',
+        username: 'steve',
+        displayName: 'steve',
+        name: {
+          first: 'steve',
+          last: 'smith',
+          middle: undefined,
+        },
+        email: 'steve@example.com',
+        picture: {
+          data: {
+            is_silhouette: false,
+            url: 'https://example.com/profile.png',
+          },
+        },
+        raw: profile,
+      },
+    })
+  })
+})

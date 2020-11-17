@@ -1,8 +1,8 @@
 {
-  "name": "@hapi/bell",
+  "name": "@userfront/bell",
   "description": "Third-party login plugin for hapi",
   "version": "12.1.1",
-  "repository": "git://github.com/hapijs/bell",
+  "repository": "git://github.com/userfront/bell",
   "main": "lib/index.js",
   "engines": {
     "node": ">=12.0.0"
@@ -56,10 +56,13 @@
     "@hapi/hapi": "20.x.x",
     "@hapi/hawk": "8.x.x",
     "@hapi/lab": "24.x.x",
-    "@hapi/teamwork": "5.x.x"
+    "@hapi/teamwork": "5.x.x",
+    "nock": "^13.0.5",
+    "sinon": "^9.2.1"
   },
   "scripts": {
-    "test": "lab -a @hapi/code -t 100 -L -m 3000",
+    "test": "lab -a @hapi/code -m 3000",
+    "test:watch": "nodemon --exec npm test --watch ./",
     "test-cov-html": "lab -a @hapi/code -r html -o coverage.html -m 3000"
   },
   "license": "BSD-3-Clause"

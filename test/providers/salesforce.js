@@ -1,269 +1,255 @@
-'use strict';
+'use strict'
 
-const Bell = require('../..');
-const Code = require('@hapi/code');
-const Hapi = require('@hapi/hapi');
-const Hoek = require('@hapi/hoek');
-const Lab = require('@hapi/lab');
+const Bell = require('../..')
+const Code = require('@hapi/code')
+const Hapi = require('@hapi/hapi')
+const Hoek = require('@hapi/hoek')
+const Lab = require('@hapi/lab')
 
-const Mock = require('../mock');
+const Mock = require('../mock')
 
+const internals = {}
 
-const internals = {};
-
-
-const { describe, it } = exports.lab = Lab.script();
-const expect = Code.expect;
-
+const { describe, it } = (exports.lab = Lab.script())
+const expect = Code.expect
 
 describe('salesforce', () => {
+  it('fails with extendedProfile false and identityServiceProfile true', () => {
+    const throws = () => {
+      Bell.providers.salesforce({ extendedProfile: false, identityServiceProfile: true })
+    }
 
-    it('fails with extendedProfile false and identityServiceProfile true', () => {
+    expect(throws).to.throw(Error)
+  })
 
-        const throws = () => {
+  it('authenticates with mock', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-            Bell.providers.salesforce({ extendedProfile: false, identityServiceProfile: true });
-        };
+    const custom = Bell.providers.salesforce()
 
-        expect(throws).to.throw(Error);
-    });
+    expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize')
+    expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token')
 
-    it('authenticates with mock', async (flags) => {
+    Hoek.merge(custom, mock.provider)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const profile = {
+      user_id: '1234567890',
+      username: 'steve',
+      display_name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+    }
 
-        const custom = Bell.providers.salesforce();
+    Mock.override('https://login.salesforce.com/services/oauth2/userinfo', profile)
 
-        expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize');
-        expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token');
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'salesforce',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        Hoek.merge(custom, mock.provider);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const profile = {
-            user_id: '1234567890',
-            username: 'steve',
-            display_name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com'
-        };
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        Mock.override('https://login.salesforce.com/services/oauth2/userinfo', profile);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'salesforce',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile,
+    })
+  })
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+  it('authenticates with mock and custom uri', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const custom = Bell.providers.salesforce({ identityServiceProfile: true })
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize')
+    expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token')
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    Hoek.merge(custom, mock.provider)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile
-        });
-    });
+    const profile = {
+      user_id: '1234567890',
+      username: 'steve',
+      display_name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+    }
 
-    it('authenticates with mock and custom uri', async (flags) => {
+    Mock.override('https://login.salesforce.com/id/foo/bar', profile)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'salesforce',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const custom = Bell.providers.salesforce({ identityServiceProfile: true });
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize');
-        expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token');
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        Hoek.merge(custom, mock.provider);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        const profile = {
-            user_id: '1234567890',
-            username: 'steve',
-            display_name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com'
-        };
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile,
+    })
+  })
 
-        Mock.override('https://login.salesforce.com/id/foo/bar', profile);
+  it('authenticates with mock and identityServiceProfile', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'salesforce',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const custom = Bell.providers.salesforce({ uri: 'http://example.com' })
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    expect(custom.auth).to.equal('http://example.com/services/oauth2/authorize')
+    expect(custom.token).to.equal('http://example.com/services/oauth2/token')
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    Hoek.merge(custom, mock.provider)
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    const profile = {
+      user_id: '1234567890',
+      username: 'steve',
+      display_name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+    }
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    Mock.override('http://example.com/services/oauth2/userinfo', profile)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile
-        });
-    });
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'salesforce',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-    it('authenticates with mock and identityServiceProfile', async (flags) => {
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        const custom = Bell.providers.salesforce({ uri: 'http://example.com' });
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        expect(custom.auth).to.equal('http://example.com/services/oauth2/authorize');
-        expect(custom.token).to.equal('http://example.com/services/oauth2/token');
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      profile,
+    })
+  })
 
-        Hoek.merge(custom, mock.provider);
+  it('authenticates with mock (without extended profile)', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        const profile = {
-            user_id: '1234567890',
-            username: 'steve',
-            display_name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com'
-        };
+    const custom = Bell.providers.salesforce({ extendedProfile: false })
 
-        Mock.override('http://example.com/services/oauth2/userinfo', profile);
+    expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize')
+    expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token')
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'salesforce',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    Hoek.merge(custom, mock.provider)
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const profile = {
+      user_id: '1234567890',
+      username: 'steve',
+      display_name: 'steve',
+      first_name: 'steve',
+      last_name: 'smith',
+      email: 'steve@example.com',
+    }
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    Mock.override('https://login.salesforce.com/services/oauth2/userinfo', profile)
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'salesforce',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile
-        });
-    });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-    it('authenticates with mock (without extended profile)', async (flags) => {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
-
-        const custom = Bell.providers.salesforce({ extendedProfile: false });
-
-        expect(custom.auth).to.equal('https://login.salesforce.com/services/oauth2/authorize');
-        expect(custom.token).to.equal('https://login.salesforce.com/services/oauth2/token');
-
-        Hoek.merge(custom, mock.provider);
-
-        const profile = {
-            user_id: '1234567890',
-            username: 'steve',
-            display_name: 'steve',
-            first_name: 'steve',
-            last_name: 'smith',
-            email: 'steve@example.com'
-        };
-
-        Mock.override('https://login.salesforce.com/services/oauth2/userinfo', profile);
-
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'salesforce',
-            clientSecret: 'secret',
-            provider: custom
-        });
-
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
-
-                    return request.auth.credentials;
-                }
-            }
-        });
-
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
-
-        const res2 = await mock.server.inject(res1.headers.location);
-
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {}
-        });
-    });
-});
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+    })
+  })
+})
