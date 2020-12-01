@@ -2384,14 +2384,26 @@ describe('Bell', () => {
       await server.register(Bell)
 
       const tenantId = 'abcd1234'
+      const clientId = 'test-google-client-id-1234'
+      function mockDbLookup(tenantId) {
+        return new Promise(resolve => {
+          const tenant = {
+            name: 'first tenant',
+            eid: tenantId,
+            googlePublicKey: clientId,
+          }
+          return resolve(tenant)
+        })
+      }
 
       const strategyOptions = {
         password: 'cookie_encryption_password_secure',
         isSecure: false,
         clientId: 'test',
         clientSecret: 'secret',
-        preAuthorizationHook: (request, settings) => {
-          settings.clientId = `${request.query.tenant_id}-client-id`
+        preAuthorizationHook: async (request, settings) => {
+          const tenant = await mockDbLookup(request.query.tenant_id)
+          settings.clientId = tenant.googlePublicKey
         },
         provider: mock.provider,
       }
@@ -2415,7 +2427,7 @@ describe('Bell', () => {
       // Assert client ID was modified
       expect(res.headers.location).to.contain(
         mock.uri +
-          `/auth?client_id=${tenantId}-client-id&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
+          `/auth?client_id=${clientId}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
       )
 
       // Assert preAuthorizationHook was called
@@ -2430,21 +2442,35 @@ describe('Bell', () => {
       })
       await server.register(Bell)
 
+      const clientId = 'test-google-client-id-1234'
+      const clientSecret = 'test-google-client-secret-1234'
+      function mockDbLookup(tenantId) {
+        return new Promise(resolve => {
+          const tenant = {
+            name: 'first tenant',
+            eid: tenantId,
+            googlePublicKey: clientId,
+            googlePrivateKey: clientSecret,
+          }
+          return resolve(tenant)
+        })
+      }
+
       const strategyOptions = {
         password: 'cookie_encryption_password_secure',
         isSecure: false,
         clientId: 'test',
         clientSecret: 'secret',
-        postAuthorizationHook: (request, settings) => {
+        postAuthorizationHook: async (request, settings) => {
           // Use tenantId from cookie if exists
           if (
             request.state &&
             request.state[settings.cookie] &&
             request.state[settings.cookie].tenantId
           ) {
-            const tenantId = request.state[settings.cookie].tenantId
-            settings.clientId = `${tenantId}-client-id`
-            settings.clientSecret = `${tenantId}-client-secret`
+            const tenant = await mockDbLookup(request.state[settings.cookie].tenantId)
+            settings.clientId = tenant.googlePublicKey
+            settings.clientSecret = tenant.googlePrivateKey
           }
         },
         provider: mock.provider,
@@ -2481,8 +2507,8 @@ describe('Bell', () => {
         .persist()
         .post('/token', body => {
           // Assert clientId & clientSecret were modified
-          expect(body.client_id).to.equal(`${tenantId}-client-id`)
-          expect(body.client_secret).to.equal(`${tenantId}-client-secret`)
+          expect(body.client_id).to.equal(clientId)
+          expect(body.client_secret).to.equal(clientSecret)
           return true
         })
         .reply(200)
