@@ -1,274 +1,274 @@
-'use strict';
+'use strict'
 
-const Bell = require('../..');
-const Code = require('@hapi/code');
-const Hapi = require('@hapi/hapi');
-const Hoek = require('@hapi/hoek');
-const Lab = require('@hapi/lab');
+const Bell = require('../..')
+const Code = require('@hapi/code')
+const Hapi = require('@hapi/hapi')
+const Hoek = require('@hapi/hoek')
+const Lab = require('@hapi/lab')
 
-const Mock = require('../mock');
+const Mock = require('../mock')
 
+const internals = {}
 
-const internals = {};
-
-
-const { describe, it } = exports.lab = Lab.script();
-const expect = Code.expect;
-
+const { describe, it } = (exports.lab = Lab.script())
+const expect = Code.expect
 
 describe('vk', () => {
+  it('authenticates with mock', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-    it('authenticates with mock', async (flags) => {
+    const custom = Bell.providers.vk()
+    Hoek.merge(custom, mock.provider)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const data = {
+      response: [
+        {
+          id: '1234567890',
+          first_name: 'steve',
+          last_name: 'smith',
+        },
+      ],
+    }
 
-        const custom = Bell.providers.vk();
-        Hoek.merge(custom, mock.provider);
+    Mock.override('https://api.vk.com/method/users.get', data)
 
-        const data = {
-            response: [{
-                id: '1234567890',
-                first_name: 'steve',
-                last_name: 'smith'
-            }]
-        };
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'vk',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        Mock.override('https://api.vk.com/method/users.get', data);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'vk',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        displayName: 'steve smith',
+        name: {
+          first: 'steve',
+          last: 'smith',
+        },
+        raw: data.response[0],
+      },
+    })
+  })
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+  it('authenticates with mock and custom version', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    const custom = Bell.providers.vk({ version: '5.6' })
+    Hoek.merge(custom, mock.provider)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                displayName: 'steve smith',
-                name: {
-                    first: 'steve',
-                    last: 'smith'
-                },
-                raw: data.response[0]
-            }
-        });
-    });
+    const data = {
+      response: [
+        {
+          id: '1234567890',
+          first_name: 'steve',
+          last_name: 'smith',
+        },
+      ],
+    }
 
-    it('authenticates with mock and custom version', async (flags) => {
+    Mock.override('https://api.vk.com/method/users.get', data)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'vk',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const custom = Bell.providers.vk({ version: '5.6' });
-        Hoek.merge(custom, mock.provider);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const data = {
-            response: [{
-                id: '1234567890',
-                first_name: 'steve',
-                last_name: 'smith'
-            }]
-        };
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        Mock.override('https://api.vk.com/method/users.get', data);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'vk',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        displayName: 'steve smith',
+        name: {
+          first: 'steve',
+          last: 'smith',
+        },
+        raw: data.response[0],
+      },
+    })
+  })
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+  it('authenticates with mock and custom version low 5', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const custom = Bell.providers.vk({ version: '4.104' })
+    Hoek.merge(custom, mock.provider)
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    const data = {
+      response: [
+        {
+          uid: '1234567890',
+          first_name: 'steve',
+          last_name: 'smith',
+        },
+      ],
+    }
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    Mock.override('https://api.vk.com/method/users.get', data)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                displayName: 'steve smith',
-                name: {
-                    first: 'steve',
-                    last: 'smith'
-                },
-                raw: data.response[0]
-            }
-        });
-    });
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'vk',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-    it('authenticates with mock and custom version low 5', async (flags) => {
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        const custom = Bell.providers.vk({ version: '4.104' });
-        Hoek.merge(custom, mock.provider);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        const data = {
-            response: [{
-                uid: '1234567890',
-                first_name: 'steve',
-                last_name: 'smith'
-            }]
-        };
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        displayName: 'steve smith',
+        name: {
+          first: 'steve',
+          last: 'smith',
+        },
+        raw: data.response[0],
+      },
+    })
+  })
 
-        Mock.override('https://api.vk.com/method/users.get', data);
+  it('authenticates with mock and custom fields', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'vk',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const custom = Bell.providers.vk({ fields: 'sex,status' })
+    Hoek.merge(custom, mock.provider)
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const data = {
+      response: [
+        {
+          id: '1234567890',
+          sex: 2,
+          status: '',
+          first_name: 'steve',
+          last_name: 'smith',
+        },
+      ],
+    }
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    Mock.override('https://api.vk.com/method/users.get', data)
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'vk',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                displayName: 'steve smith',
-                name: {
-                    first: 'steve',
-                    last: 'smith'
-                },
-                raw: data.response[0]
-            }
-        });
-    });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-    it('authenticates with mock and custom fields', async (flags) => {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
-
-        const custom = Bell.providers.vk({ fields: 'sex,status' });
-        Hoek.merge(custom, mock.provider);
-
-        const data = {
-            response: [{
-                id: '1234567890',
-                sex: 2,
-                status: '',
-                first_name: 'steve',
-                last_name: 'smith'
-            }]
-        };
-
-        Mock.override('https://api.vk.com/method/users.get', data);
-
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'vk',
-            clientSecret: 'secret',
-            provider: custom
-        });
-
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
-
-                    return request.auth.credentials;
-                }
-            }
-        });
-
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
-
-        const res2 = await mock.server.inject(res1.headers.location);
-
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                displayName: 'steve smith',
-                name: {
-                    first: 'steve',
-                    last: 'smith'
-                },
-                raw: data.response[0]
-            }
-        });
-    });
-});
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        displayName: 'steve smith',
+        name: {
+          first: 'steve',
+          last: 'smith',
+        },
+        raw: data.response[0],
+      },
+    })
+  })
+})

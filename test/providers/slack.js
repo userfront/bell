@@ -1,131 +1,125 @@
-'use strict';
+'use strict'
 
-const Bell = require('../..');
-const Code = require('@hapi/code');
-const Hapi = require('@hapi/hapi');
-const Hoek = require('@hapi/hoek');
-const Lab = require('@hapi/lab');
+const Bell = require('../..')
+const Code = require('@hapi/code')
+const Hapi = require('@hapi/hapi')
+const Hoek = require('@hapi/hoek')
+const Lab = require('@hapi/lab')
 
-const Mock = require('../mock');
+const Mock = require('../mock')
 
+const internals = {}
 
-const internals = {};
-
-
-const { describe, it } = exports.lab = Lab.script();
-const expect = Code.expect;
-
+const { describe, it } = (exports.lab = Lab.script())
+const expect = Code.expect
 
 describe('slack', () => {
+  it('authenticates with mock', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-    it('authenticates with mock', async (flags) => {
+    const custom = Bell.providers.slack()
+    Hoek.merge(custom, mock.provider)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const profile = {
+      ok: true,
+      url: 'https://example.slack.com/',
+      team: 'Example',
+      user: 'cal',
+      team_id: 'T12345',
+      user_id: 'U12345',
+    }
 
-        const custom = Bell.providers.slack();
-        Hoek.merge(custom, mock.provider);
+    Mock.override('https://slack.com/api/auth.test', profile)
 
-        const profile = {
-            ok: true,
-            url: 'https:\/\/example.slack.com\/',
-            team: 'Example',
-            user: 'cal',
-            team_id: 'T12345',
-            user_id: 'U12345'
-        };
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'slack',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        Mock.override('https://slack.com/api/auth.test', profile);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'slack',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      refreshToken: undefined,
+      expiresIn: 3600,
+      query: {},
+      state: { query: {} },
+      profile: {
+        access_token: '456',
+        scope: undefined,
+        user: 'cal',
+        user_id: 'U12345',
+        raw: profile,
+      },
+    })
+  })
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+  it('authenticates with mock (without extended profile)', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    const custom = Bell.providers.slack({ extendedProfile: false })
+    Hoek.merge(custom, mock.provider)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            refreshToken: undefined,
-            expiresIn: 3600,
-            query: {},
-            profile: {
-                access_token: '456',
-                scope: undefined,
-                user: 'cal',
-                user_id: 'U12345',
-                raw: profile
-            }
-        });
-    });
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'slack',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-    it('authenticates with mock (without extended profile)', async (flags) => {
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        const custom = Bell.providers.slack({ extendedProfile: false });
-        Hoek.merge(custom, mock.provider);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'slack',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
-
-                    return request.auth.credentials;
-                }
-            }
-        });
-
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
-
-        const res2 = await mock.server.inject(res1.headers.location);
-
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            refreshToken: undefined,
-            expiresIn: 3600,
-            query: {},
-            profile: {
-                scope: undefined,
-                access_token: '456'
-            }
-        });
-    });
-});
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      refreshToken: undefined,
+      expiresIn: 3600,
+      query: {},
+      state: { query: {} },
+      profile: {
+        scope: undefined,
+        access_token: '456',
+      },
+    })
+  })
+})

@@ -1,140 +1,134 @@
-'use strict';
+'use strict'
 
-const Bell = require('../..');
-const Code = require('@hapi/code');
-const Hapi = require('@hapi/hapi');
-const Hoek = require('@hapi/hoek');
-const Lab = require('@hapi/lab');
+const Bell = require('../..')
+const Code = require('@hapi/code')
+const Hapi = require('@hapi/hapi')
+const Hoek = require('@hapi/hoek')
+const Lab = require('@hapi/lab')
 
-const Mock = require('../mock');
+const Mock = require('../mock')
 
+const internals = {}
 
-const internals = {};
-
-
-const { describe, it } = exports.lab = Lab.script();
-const expect = Code.expect;
-
+const { describe, it } = (exports.lab = Lab.script())
+const expect = Code.expect
 
 describe('spotify', () => {
+  it('authenticates with mock', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-    it('authenticates with mock', async (flags) => {
+    const custom = Bell.providers.spotify()
+    Hoek.merge(custom, mock.provider)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    const profile = {
+      id: '1234567890',
+      username: '1234567890',
+      display_name: 'steve',
+      email: 'steve@example.com',
+    }
 
-        const custom = Bell.providers.spotify();
-        Hoek.merge(custom, mock.provider);
+    Mock.override('https://api.spotify.com/v1/me', profile)
 
-        const profile = {
-            id: '1234567890',
-            username: '1234567890',
-            display_name: 'steve',
-            email: 'steve@example.com'
-        };
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'spotify',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        Mock.override('https://api.spotify.com/v1/me', profile);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'spotify',
-            clientSecret: 'secret',
-            provider: custom
-        });
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
+    const res2 = await mock.server.inject(res1.headers.location)
 
-                    return request.auth.credentials;
-                }
-            }
-        });
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        username: '1234567890',
+        displayName: 'steve',
+        email: 'steve@example.com',
+        raw: profile,
+      },
+    })
+  })
 
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
+  it('authenticates with mock and custom uri', async flags => {
+    const mock = await Mock.v2(flags)
+    const server = Hapi.server({ host: 'localhost', port: 80 })
+    await server.register(Bell)
 
-        const res2 = await mock.server.inject(res1.headers.location);
+    const custom = Bell.providers.spotify({ uri: 'http://api.example.com' })
+    Hoek.merge(custom, mock.provider)
 
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                username: '1234567890',
-                displayName: 'steve',
-                email: 'steve@example.com',
-                raw: profile
-            }
-        });
-    });
+    const profile = {
+      id: '1234567890',
+      username: '1234567890',
+      display_name: 'steve',
+      email: 'steve@example.com',
+    }
 
-    it('authenticates with mock and custom uri', async (flags) => {
+    Mock.override('http://api.example.com/v1/me', profile)
 
-        const mock = await Mock.v2(flags);
-        const server = Hapi.server({ host: 'localhost', port: 80 });
-        await server.register(Bell);
+    server.auth.strategy('custom', 'bell', {
+      password: 'cookie_encryption_password_secure',
+      isSecure: false,
+      clientId: 'spotify',
+      clientSecret: 'secret',
+      provider: custom,
+    })
 
-        const custom = Bell.providers.spotify({ uri: 'http://api.example.com' });
-        Hoek.merge(custom, mock.provider);
+    server.route({
+      method: '*',
+      path: '/login',
+      config: {
+        auth: 'custom',
+        handler: function (request, h) {
+          return request.auth.credentials
+        },
+      },
+    })
 
-        const profile = {
-            id: '1234567890',
-            username: '1234567890',
-            display_name: 'steve',
-            email: 'steve@example.com'
-        };
+    const res1 = await server.inject('/login')
+    const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
-        Mock.override('http://api.example.com/v1/me', profile);
+    const res2 = await mock.server.inject(res1.headers.location)
 
-        server.auth.strategy('custom', 'bell', {
-            password: 'cookie_encryption_password_secure',
-            isSecure: false,
-            clientId: 'spotify',
-            clientSecret: 'secret',
-            provider: custom
-        });
-
-        server.route({
-            method: '*',
-            path: '/login',
-            config: {
-                auth: 'custom',
-                handler: function (request, h) {
-
-                    return request.auth.credentials;
-                }
-            }
-        });
-
-        const res1 = await server.inject('/login');
-        const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';';
-
-        const res2 = await mock.server.inject(res1.headers.location);
-
-        const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } });
-        expect(res3.result).to.equal({
-            provider: 'custom',
-            token: '456',
-            expiresIn: 3600,
-            refreshToken: undefined,
-            query: {},
-            profile: {
-                id: '1234567890',
-                username: '1234567890',
-                displayName: 'steve',
-                email: 'steve@example.com',
-                raw: profile
-            }
-        });
-    });
-});
+    const res3 = await server.inject({ url: res2.headers.location, headers: { cookie } })
+    expect(res3.result).to.equal({
+      provider: 'custom',
+      token: '456',
+      expiresIn: 3600,
+      refreshToken: undefined,
+      query: {},
+      state: { query: {} },
+      profile: {
+        id: '1234567890',
+        username: '1234567890',
+        displayName: 'steve',
+        email: 'steve@example.com',
+        raw: profile,
+      },
+    })
+  })
+})
