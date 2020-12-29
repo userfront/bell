@@ -1386,6 +1386,7 @@ describe('Bell v2', () => {
       await override
     })
   })
+
   describe('hooks', () => {
     it('calls preAuthorizationHook if present', async flags => {
       const mock = await Mock.v2(flags)
@@ -1535,5 +1536,75 @@ describe('Bell v2', () => {
       expect(spy.calledOnce).to.equal(true)
       expect(scope.pendingMocks()).to.equal([])
     })
+  })
+
+  describe.only('concurrency', () => {
+    it('it authenticates 5 requests with same provider', async flags => {
+      const mock = await Mock.v2(flags)
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
+      })
+      await server.register(Bell)
+
+      server.auth.strategy('custom', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        clientId: 'test',
+        clientSecret: 'secret',
+        provider: mock.provider,
+      })
+
+      server.route({
+        method: '*',
+        path: '/login',
+        options: {
+          auth: 'custom',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const arrayOf5 = [...Array(5).keys()]
+      const results = await Promise.all(arrayOf5.map(makeRequest))
+      console.log('results', results)
+
+      for (const requestStates in results) {
+        expect(requestStates[0]).to.equal(requestStates[0])
+      }
+
+      function makeRequest(n) {
+        return new Promise(async (resolve, reject) => {
+          const res1 = await delayedRequest(server, '/login')
+          const res1Params = new URLSearchParams(res1.headers.location)
+          console.log(n, 'res1', res1Params.get('state'))
+
+          const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+          const res2 = await delayedRequest(mock.server, res1.headers.location)
+          const res2Params = new URLSearchParams(res2.headers.location)
+          console.log(n, 'res2', res2Params.get('state'))
+
+          const res3 = await server.inject({
+            url: res2.headers.location,
+            headers: { cookie },
+          })
+          expect(res3.statusCode).to.equal(200)
+
+          return resolve([res1Params.get('state'), res2Params.get('state')])
+        })
+      }
+    })
+
+    function delayedRequest(server, url) {
+      return new Promise(resolve => {
+        // Delay 20-180ms
+        const delay = Math.random().toString().slice(2, 3) * 20 || 20
+
+        setTimeout(() => {
+          resolve(server.inject(url))
+        }, delay)
+      })
+    }
   })
 })
