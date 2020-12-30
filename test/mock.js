@@ -1,7 +1,6 @@
 'use strict'
 
 const Querystring = require('querystring')
-
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
 const Hapi = require('@hapi/hapi')
@@ -273,6 +272,10 @@ exports.v2 = async function (flags, options = {}) {
     useParamsAuth: mock.useParamsAuth,
     auth: mock.server.info.uri + '/auth',
     token: mock.server.info.uri + '/token',
+  }
+
+  if (options.providerName) {
+    mock.provider.name = options.providerName
   }
 
   flags.onCleanup = () => {
