@@ -1690,6 +1690,139 @@ describe('Bell v2', () => {
       }
     )
 
+    it(
+      'it authenticates 9 requests. 3 providers, 3 users per provider',
+      { plan: 18 },
+      async flags => {
+        const server = Hapi.server({
+          host: 'localhost',
+          port: 8080,
+        })
+        await server.register(Bell)
+
+        // Set up GitHub provider & route
+        const githubMock = await Mock.v2(flags, { providerName: 'github' })
+        const githubProvider = Bell.providers.github()
+        Hoek.merge(githubProvider, githubMock.provider)
+        server.auth.strategy('github', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'github-client-id',
+          clientSecret: 'github-client-secret',
+          provider: githubProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/github-login',
+          options: {
+            auth: 'github',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        // Set up Google provider & route
+        const googleMock = await Mock.v2(flags, { providerName: 'google' })
+        const googleProvider = Bell.providers.google()
+        Hoek.merge(googleProvider, googleMock.provider)
+        server.auth.strategy('google', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'google-client-id',
+          clientSecret: 'google-client-secret',
+          provider: googleProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/google-login',
+          options: {
+            auth: 'google',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        // Set up Azure provider & route
+        const azureMock = await Mock.v2(flags, { providerName: 'azure' })
+        const azureProvider = Bell.providers.azure()
+        Hoek.merge(azureProvider, azureMock.provider)
+        server.auth.strategy('azure', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'azure-client-id',
+          clientSecret: 'azure-client-secret',
+          provider: azureProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/azure-login',
+          options: {
+            auth: 'azure',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        const arrayOf6 = [...Array(9).keys()]
+        const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+
+        for (const requestStates in results) {
+          expect(requestStates[0]).to.equal(requestStates[0])
+        }
+
+        function runOAuthFlow(n) {
+          return new Promise(async resolve => {
+            let provider
+            let mockServer
+            // Alternate between each provider based on `n`
+            if ([0, 3, 6].includes(n)) {
+              provider = 'github'
+              mockServer = githubMock.server
+            } else if ([1, 4, 7].includes(n)) {
+              provider = 'google'
+              mockServer = googleMock.server
+            } else {
+              provider = 'azure'
+              mockServer = azureMock.server
+            }
+
+            const res1 = await delayedRequest(server, `/${provider}-login`)
+            const res1Params = new URLSearchParams(res1.headers.location)
+            console.log(n, 'res1', provider, res1Params.get('state'))
+
+            const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+            const res2 = await delayedRequest(mockServer, res1.headers.location)
+            const res2Params = new URLSearchParams(res2.headers.location)
+            console.log(n, 'res2', provider, res2Params.get('state'))
+
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'token',
+              serverUri: mockServer.info.uri,
+            })
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'profile',
+            })
+
+            const res3 = await server.inject({
+              url: res2.headers.location,
+              headers: { cookie },
+              validate: false,
+            })
+
+            expect(res3.statusCode).to.equal(200)
+
+            return resolve([res1Params.get('state'), res2Params.get('state')])
+          })
+        }
+      }
+    )
+
     function delayedRequest(server, url) {
       return new Promise(resolve => {
         // Delay 20-180ms

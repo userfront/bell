@@ -384,6 +384,8 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
         return 'https://api.github.com/user'
       case 'google':
         return 'https://www.googleapis.com/oauth2/v3/userinfo'
+      case 'azure':
+        return 'https://graph.microsoft.com/v1.0/me'
       default:
         return ''
     }
@@ -411,6 +413,12 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           given_name: 'steve',
           family_name: 'smith',
           email: 'steve@example.com',
+        }
+      case 'azure':
+        return {
+          id: '1234567890',
+          displayName: 'Sample Azure User',
+          userPrincipalName: 'sample@microsoft.com',
         }
       default:
         return {}
