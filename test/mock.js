@@ -1,5 +1,6 @@
 'use strict'
 
+const nock = require('nock')
 const Querystring = require('querystring')
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
@@ -10,6 +11,7 @@ const Wreck = require('@hapi/wreck')
 
 const internals = {
   wreck: null,
+  nock: null,
 }
 
 const expect = Code.expect
@@ -331,6 +333,89 @@ exports.override = function (uri, payload) {
   Wreck.post = override('post')
 
   return team.work
+}
+
+exports.nock = internals.nock = function ({
+  url,
+  method = 'get',
+  headers = {},
+  payload,
+  statusCode = 200,
+}) {
+  if (!url) throw 'Mock.nock: url required'
+  const mockURL = new URL(url)
+
+  return nock(mockURL.origin)
+    [method](mockURL.pathname)
+    .reply((uri, requestBody, next) => {
+      next(null, [statusCode, payload, headers])
+    })
+}
+
+exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
+  if (!provider || !type) {
+    throw 'Mock.createRequestMockForProvider: missing arguments'
+  }
+
+  if (type === 'token') {
+    if (!serverUri) throw 'Mock.createRequestMockForProvider: "serverUri" required for type "token"'
+
+    return internals.nock({
+      method: 'post',
+      url: `${serverUri}/token`,
+      payload: {
+        access_token: '456',
+        expires_in: 3600,
+      },
+    })
+  }
+
+  if (type === 'profile') {
+    return internals.nock({
+      method: 'get',
+      url: getProfileURL(),
+      payload: getPayload(),
+    })
+  }
+
+  function getProfileURL() {
+    switch (provider) {
+      case 'github':
+        return 'https://api.github.com/user'
+      case 'google':
+        return 'https://www.googleapis.com/oauth2/v3/userinfo'
+      default:
+        return ''
+    }
+  }
+
+  function getPayload() {
+    switch (provider) {
+      case 'github':
+        return {
+          id: '1234567890',
+          username: 'githubuserjohnny',
+          displayName: 'johnny',
+          email: 'johnny@example.com',
+          raw: {
+            id: '1234567890',
+            login: 'githubuserjohnny',
+            name: 'johnny',
+            email: 'johnny@example.com',
+          },
+        }
+      case 'google':
+        return {
+          sub: '2345678901',
+          name: 'steve smith',
+          given_name: 'steve',
+          family_name: 'smith',
+          email: 'steve@example.com',
+        }
+      default:
+        return {}
+    }
+  }
 }
 
 exports.clear = function () {
