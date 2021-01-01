@@ -1766,8 +1766,8 @@ describe('Bell v2', () => {
           },
         })
 
-        const arrayOf6 = [...Array(9).keys()]
-        const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+        const arrayOf9 = [...Array(9).keys()]
+        const results = await Promise.all(arrayOf9.map(runOAuthFlow))
 
         for (const requestStates in results) {
           expect(requestStates[0]).to.equal(requestStates[0])
@@ -1791,13 +1791,11 @@ describe('Bell v2', () => {
 
             const res1 = await delayedRequest(server, `/${provider}-login`)
             const res1Params = new URLSearchParams(res1.headers.location)
-            console.log(n, 'res1', provider, res1Params.get('state'))
 
             const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
 
             const res2 = await delayedRequest(mockServer, res1.headers.location)
             const res2Params = new URLSearchParams(res2.headers.location)
-            console.log(n, 'res2', provider, res2Params.get('state'))
 
             Mock.createProviderRequestMock({
               provider,
@@ -1822,6 +1820,204 @@ describe('Bell v2', () => {
         }
       }
     )
+
+    it('it authenticates 6 requests, all using different providers', async flags => {
+      // { plan: 12 },
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
+      })
+      await server.register(Bell)
+
+      // Set up Auth0 provider & route
+      const auth0Mock = await Mock.v2(flags, { providerName: 'auth0' })
+      const auth0Provider = Bell.providers.auth0({ domain: 'example.auth0.com' })
+      Hoek.merge(auth0Provider, auth0Mock.provider)
+      server.auth.strategy('auth0', 'bell', {
+        config: {
+          domain: 'example.auth0.com',
+        },
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'auth0-client-id',
+        clientSecret: 'auth0-client-secret',
+        provider: auth0Provider,
+      })
+
+      server.route({
+        method: '*',
+        path: '/auth0-login',
+        options: {
+          auth: 'auth0',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Azure provider & route
+      const azureMock = await Mock.v2(flags, { providerName: 'azure' })
+      const azureProvider = Bell.providers.azure()
+      Hoek.merge(azureProvider, azureMock.provider)
+      server.auth.strategy('azure', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'azure-client-id',
+        clientSecret: 'azure-client-secret',
+        provider: azureProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/azure-login',
+        options: {
+          auth: 'azure',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Facebook provider & route
+      const facebookMock = await Mock.v2(flags, { providerName: 'facebook' })
+      const facebookProvider = Bell.providers.facebook()
+      Hoek.merge(facebookProvider, facebookMock.provider)
+      server.auth.strategy('facebook', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'facebook-client-id',
+        clientSecret: 'facebook-client-secret',
+        provider: facebookProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/facebook-login',
+        options: {
+          auth: 'facebook',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up GitHub provider & route
+      const githubMock = await Mock.v2(flags, { providerName: 'github' })
+      const githubProvider = Bell.providers.github()
+      Hoek.merge(githubProvider, githubMock.provider)
+      server.auth.strategy('github', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'github-client-id',
+        clientSecret: 'github-client-secret',
+        provider: githubProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/github-login',
+        options: {
+          auth: 'github',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Google provider & route
+      const googleMock = await Mock.v2(flags, { providerName: 'google' })
+      const googleProvider = Bell.providers.google()
+      Hoek.merge(googleProvider, googleMock.provider)
+      server.auth.strategy('google', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'google-client-id',
+        clientSecret: 'google-client-secret',
+        provider: googleProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/google-login',
+        options: {
+          auth: 'google',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up LinkedIn provider & route
+      const linkedinMock = await Mock.v2(flags, { providerName: 'linkedin' })
+      const linkedinProvider = Bell.providers.linkedin()
+      Hoek.merge(linkedinProvider, linkedinMock.provider)
+      server.auth.strategy('linkedin', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'linkedin-client-id',
+        clientSecret: 'linkedin-client-secret',
+        provider: linkedinProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/linkedin-login',
+        options: {
+          auth: 'linkedin',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const providerMocks = [
+        { name: 'auth0', mock: auth0Mock },
+        { name: 'azure', mock: azureMock },
+        { name: 'facebook', mock: facebookMock },
+        { name: 'github', mock: githubMock },
+        { name: 'google', mock: googleMock },
+        { name: 'linkedin', mock: linkedinMock },
+      ]
+
+      const arrayOf6 = [...Array(6).keys()]
+      const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+
+      for (const requestStates in results) {
+        expect(requestStates[0]).to.equal(requestStates[0])
+      }
+
+      function runOAuthFlow(n) {
+        return new Promise(async resolve => {
+          // Alternate between each provider based on `n`
+          const providerMockObj = providerMocks[n]
+          const provider = providerMockObj.name
+          const mockServer = providerMockObj.mock.server
+
+          const res1 = await delayedRequest(server, `/${provider}-login`)
+          const res1Params = new URLSearchParams(res1.headers.location)
+
+          const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+          const res2 = await delayedRequest(mockServer, res1.headers.location)
+          const res2Params = new URLSearchParams(res2.headers.location)
+
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'token',
+            serverUri: mockServer.info.uri,
+          })
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'profile',
+          })
+
+          const res3 = await server.inject({
+            url: res2.headers.location,
+            headers: { cookie },
+            validate: false,
+          })
+
+          expect(res3.statusCode).to.equal(200)
+
+          return resolve([res1Params.get('state'), res2Params.get('state')])
+        })
+      }
+    })
 
     function delayedRequest(server, url) {
       return new Promise(resolve => {

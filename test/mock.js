@@ -347,6 +347,7 @@ exports.nock = internals.nock = function ({
 
   return nock(mockURL.origin)
     [method](mockURL.pathname)
+    .query(queryObj => queryObj) // Query must be returned in order to match linkedin profile request
     .reply((uri, requestBody, next) => {
       next(null, [statusCode, payload, headers])
     })
@@ -371,28 +372,77 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
   }
 
   if (type === 'profile') {
-    return internals.nock({
-      method: 'get',
-      url: getProfileURL(),
-      payload: getPayload(),
-    })
+    // linkedin has two separate profile requests
+    if (provider === 'linkedin') {
+      internals.nock({
+        method: 'get',
+        url: getProfileURL() + '/me',
+        payload: getPayload('profile'),
+      })
+      internals.nock({
+        method: 'get',
+        url: getProfileURL() + '/emailAddress',
+        payload: getPayload('email'),
+      })
+    } else {
+      return internals.nock({
+        method: 'get',
+        url: getProfileURL(),
+        payload: getPayload(),
+      })
+    }
   }
 
   function getProfileURL() {
     switch (provider) {
+      case 'auth0':
+        return 'https://example.auth0.com/userinfo'
+      case 'azure':
+        return 'https://graph.microsoft.com/v1.0/me'
+      case 'facebook':
+        return 'https://graph.facebook.com/v3.1/me'
       case 'github':
         return 'https://api.github.com/user'
       case 'google':
         return 'https://www.googleapis.com/oauth2/v3/userinfo'
-      case 'azure':
-        return 'https://graph.microsoft.com/v1.0/me'
+      case 'linkedin':
+        return 'https://api.linkedin.com/v2'
       default:
         return ''
     }
   }
 
-  function getPayload() {
+  function getPayload(type) {
     switch (provider) {
+      case 'auth0':
+        return {
+          sub: 'auth0|1234567890',
+          name: 'steve smith',
+          given_name: 'steve',
+          family_name: 'smith',
+          email: 'steve@example.com',
+        }
+      case 'azure':
+        return {
+          id: '1234567890',
+          displayName: 'Sample Azure User',
+          userPrincipalName: 'sample@microsoft.com',
+        }
+      case 'facebook':
+        return {
+          id: '1234567890',
+          username: 'steve',
+          name: 'steve',
+          first_name: 'steve',
+          last_name: 'smith',
+          email: 'steve@example.com',
+          picture: {
+            data: {
+              is_silhouette: false,
+              url: 'https://example.com/profile.png',
+            },
+          },
+        }
       case 'github':
         return {
           id: '1234567890',
@@ -414,11 +464,42 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           family_name: 'smith',
           email: 'steve@example.com',
         }
-      case 'azure':
-        return {
-          id: '1234567890',
-          displayName: 'Sample Azure User',
-          userPrincipalName: 'sample@microsoft.com',
+      case 'linkedin':
+        if (type === 'profile') {
+          return {
+            id: '1234567890',
+            firstName: {
+              localized: {
+                en_US: 'steve',
+              },
+              preferredLocal: {
+                country: 'US',
+                language: 'en',
+              },
+            },
+            lastName: {
+              localized: {
+                en_US: 'smith',
+              },
+              preferredLocal: {
+                country: 'US',
+                language: 'en',
+              },
+            },
+          }
+        }
+
+        if (type === 'email') {
+          return {
+            elements: [
+              {
+                handle: 'urn:li:emailAddress:3775708763',
+                'handle~': {
+                  emailAddress: 'steve.smith@domain.com',
+                },
+              },
+            ],
+          }
         }
       default:
         return {}
