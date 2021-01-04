@@ -10,1000 +10,12 @@ const Hoek = require('@hapi/hoek')
 const Lab = require('@hapi/lab')
 
 const Bell = require('../lib')
-const OAuth = require('../lib/oauth')
 const Mock = require('./mock')
-const privateKey = require('./constants.json').privateKey
 
 const { describe, it } = (exports.lab = Lab.script())
-const expect = Code.expect
+const { expect } = Code
 
-describe('Bell', () => {
-  describe('v1()', () => {
-    it('errors on missing oauth_verifier', async () => {
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: 'twitter',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?oauth_token=123')
-      expect(res.statusCode).to.equal(500)
-    })
-
-    it('attempts to perform html redirection on missing cookie on token step', async () => {
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: 'twitter',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?oauth_token=123&oauth_verifier=123')
-      expect(res.statusCode).to.equal(200)
-      expect(res.result).to.equal(
-        '<html><head><meta http-equiv="refresh" content="0;URL=\'http://localhost:8080/login?oauth_token=123&oauth_verifier=123&refresh=1\'"></head><body></body></html>'
-      )
-    })
-
-    it('errors on missing cookie on token step (with refresh)', async () => {
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: 'twitter',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?oauth_token=123&oauth_verifier=123&refresh=1')
-      expect(res.statusCode).to.equal(500)
-    })
-
-    it('errors on rejected/denied query parameter', async () => {
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: 'twitter',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?error=access_denied')
-      expect(res.statusCode).to.equal(500)
-      const res2 = await server.inject('/login?denied=true')
-      expect(res2.statusCode).to.equal(500)
-    })
-
-    it('fails getting temporary credentials', async flags => {
-      const mock = await Mock.v1(flags, { failTemporary: true })
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login')
-      expect(res.statusCode).to.equal(500)
-    })
-
-    it('fails getting token credentials', async flags => {
-      const mock = await Mock.v1(flags, { failToken: true })
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(500)
-    })
-
-    it('passes credentials on error (temporary error)', async flags => {
-      const mock = await Mock.v1(flags, { failTemporary: true })
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: {
-            strategy: 'custom',
-            mode: 'try',
-          },
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?some=thing')
-      expect(res.result).to.equal({
-        provider: 'custom',
-        query: { some: 'thing' },
-      })
-    })
-
-    it('passes credentials on error (token error)', async flags => {
-      const mock = await Mock.v1(flags, { failToken: true })
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: {
-            strategy: 'custom',
-            mode: 'try',
-          },
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login?some=thing')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.result).to.equal({
-        provider: 'custom',
-        query: { some: 'thing' },
-      })
-    })
-
-    it('does not pass on runtime query params by default', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?runtime=true')
-      expect(res.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-    })
-
-    it('passes on runtime query params with allowRuntimeProviderParams', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        allowRuntimeProviderParams: true,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login?runtime=true')
-      expect(res.headers.location).to.equal(mock.uri + '/auth?oauth_token=1&runtime=true')
-    })
-
-    it('authenticates an endpoint via oauth with auth provider parameters', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        providerParams: {
-          special: true,
-        },
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?special=true&oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123&extra=true'
-      )
-    })
-
-    it('authenticates an endpoint via oauth with a function as provider parameters', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        providerParams: request => ({
-          value: request.query.foo,
-        }),
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login?foo=bar')
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?value=bar&oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123&extra=true'
-      )
-    })
-
-    it('passes profileParams', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      const custom = Bell.providers.twitter()
-      Hoek.merge(custom, mock.provider)
-
-      const override = Mock.override('https://api.twitter.com/1.1/users/show.json', uri => {
-        expect(uri).to.equal(
-          'https://api.twitter.com/1.1/users/show.json?user_id=1234567890&fields=id%2Cemail'
-        )
-      })
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'twitter',
-        clientSecret: 'secret',
-        provider: custom,
-        profileParams: {
-          fields: 'id,email',
-        },
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-
-      await override
-    })
-
-    it('errors on invalid resource request (mock Twitter)', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      const custom = Bell.providers.twitter()
-      Hoek.merge(custom, mock.provider)
-
-      Mock.override('https://api.twitter.com/1.1/users/show.json', Boom.badRequest())
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'twitter',
-        clientSecret: 'secret',
-        provider: custom,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123'
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(500)
-    })
-
-    it('authenticates with mock Twitter with skip profile', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      const custom = Bell.providers.twitter()
-      Hoek.merge(custom, mock.provider)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'twitter',
-        clientSecret: 'secret',
-        provider: custom,
-        skipProfile: true,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-
-      expect(res3.result).to.equal({
-        provider: 'custom',
-        token: 'final',
-        secret: 'secret',
-        query: {},
-      })
-    })
-
-    it('errors on mismatching token', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-
-      await mock.server.inject(res1.headers.location)
-
-      const res2 = await server.inject({
-        url: 'http://localhost:8080/login?oauth_token=2&oauth_verifier=123',
-        headers: { cookie },
-      })
-      expect(res2.statusCode).to.equal(500)
-    })
-
-    it('errors if isSecure is true when protocol is not https', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: true,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: (request, h) => {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res = await server.inject('/login')
-      expect(res.statusCode).to.equal(500)
-    })
-
-    it('passes if isSecure is true when protocol is https (forced)', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        isSecure: true,
-        password: 'cookie_encryption_password_secure',
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        forceHttps: true,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: (request, h) => {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.contain(
-        'https://localhost:8080/login?oauth_token=1&oauth_verifier='
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(200)
-    })
-
-    it('passes if isSecure is true when protocol is https (location)', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: true,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        location: 'https://differenthost:8888',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: (request, h) => {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.contain(
-        'https://differenthost:8888/login?oauth_token=1&oauth_verifier='
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(200)
-    })
-
-    it('forces https in callback_url when set in options', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        forceHttps: true,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.contain(
-        'https://localhost:8080/login?oauth_token=1&oauth_verifier='
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(200)
-    })
-
-    it('uses location setting in callback_url when set in options', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-        location: 'https://differenthost:8888',
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            return request.auth.credentials
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.contain(
-        'https://differenthost:8888/login?oauth_token=1&oauth_verifier='
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.statusCode).to.equal(200)
-    })
-
-    it('returns resource response stream', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            const client = new Bell.oauth.Client({
-              name: 'twitter',
-              provider: mock.provider,
-              clientId: 'test',
-              clientSecret: 'secret',
-            })
-
-            const credentials = request.auth.credentials
-            return client.resource('GET', mock.uri + '/resource', null, {
-              token: credentials.token,
-              secret: credentials.secret,
-              stream: true,
-            })
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login?next=%2Fhome')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123'
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.result).to.equal('some text reply')
-    })
-
-    it('returns raw resource response', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: async function (request, h) {
-            const client = new Bell.oauth.Client({
-              name: 'twitter',
-              provider: mock.provider,
-              clientId: 'test',
-              clientSecret: 'secret',
-            })
-
-            const credentials = request.auth.credentials
-            const { payload } = await client.resource(
-              'POST',
-              mock.uri + '/resource',
-              { a: 5 },
-              {
-                token: credentials.token,
-                secret: credentials.secret,
-                raw: true,
-              }
-            )
-            return payload
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login?next=%2Fhome')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123'
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.result).to.equal('{"a":"5"}')
-    })
-
-    it('returns resource POST response', async flags => {
-      const mock = await Mock.v1(flags)
-      const server = Hapi.server({
-        host: 'localhost',
-        port: 8080,
-      })
-      await server.register(Bell)
-
-      server.auth.strategy('custom', 'bell', {
-        password: 'cookie_encryption_password_secure',
-        isSecure: false,
-        clientId: 'test',
-        clientSecret: 'secret',
-        provider: mock.provider,
-      })
-
-      server.route({
-        method: '*',
-        path: '/login',
-        options: {
-          auth: 'custom',
-          handler: function (request, h) {
-            const client = new Bell.oauth.Client({
-              name: 'twitter',
-              provider: mock.provider,
-              clientId: 'test',
-              clientSecret: 'secret',
-            })
-
-            const credentials = request.auth.credentials
-            return client.resource(
-              'POST',
-              mock.uri + '/resource',
-              { a: 5 },
-              {
-                token: credentials.token,
-                secret: credentials.secret,
-                stream: true,
-              }
-            )
-          },
-        },
-      })
-
-      const res1 = await server.inject('/login?next=%2Fhome')
-      const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
-      expect(res1.headers.location).to.equal(mock.uri + '/auth?oauth_token=1')
-
-      const res2 = await mock.server.inject(res1.headers.location)
-      expect(res2.headers.location).to.equal(
-        'http://localhost:8080/login?oauth_token=1&oauth_verifier=123'
-      )
-
-      const res3 = await server.inject({
-        url: res2.headers.location,
-        headers: { cookie },
-      })
-      expect(res3.result).to.equal('{"a":"5"}')
-    })
-  })
-
+describe('Bell v2', () => {
   describe('v2()', () => {
     it('authenticates an endpoint with provider parameters', async flags => {
       const mock = await Mock.v2(flags)
@@ -2374,7 +1386,6 @@ describe('Bell', () => {
     })
   })
 
-  // Currently only supported by OAuth.v2
   describe('hooks', () => {
     it('calls preAuthorizationHook if present', async flags => {
       const mock = await Mock.v2(flags)
@@ -2526,253 +1537,699 @@ describe('Bell', () => {
     })
   })
 
-  describe('Client (v1 only)', () => {
-    it('accepts empty client secret', () => {
-      const client = new OAuth.Client({
-        provider: Bell.providers.twitter(),
+  describe('concurrency', () => {
+    it('it authenticates 6 requests with same provider', async flags => {
+      const mock = await Mock.v2(flags)
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
       })
-      expect(client.settings.clientSecret).to.equal('&')
+      await server.register(Bell)
+
+      server.auth.strategy('custom', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        clientId: 'test',
+        clientSecret: 'secret',
+        provider: mock.provider,
+      })
+
+      server.route({
+        method: '*',
+        path: '/login',
+        options: {
+          auth: 'custom',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const arrayOf6 = [...Array(6).keys()]
+      const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+
+      for (const requestStates of results) {
+        expect(requestStates[0]).to.equal(requestStates[1])
+      }
+
+      function runOAuthFlow(n) {
+        return new Promise(async resolve => {
+          const res1 = await delayedRequest(server, '/login')
+          const res1Params = new URLSearchParams(res1.headers.location)
+
+          const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+          const res2 = await delayedRequest(mock.server, res1.headers.location)
+          const res2Params = new URLSearchParams(res2.headers.location)
+
+          const res3 = await server.inject({
+            url: res2.headers.location,
+            headers: { cookie },
+          })
+          expect(res3.statusCode).to.equal(200)
+
+          return resolve([res1Params.get('state'), res2Params.get('state')])
+        })
+      }
     })
 
-    describe('_request()', () => {
-      it('errors on failed request', async () => {
-        Mock.override('http://example.com/', null)
-
-        const client = new OAuth.Client({
-          provider: Bell.providers.twitter(),
+    it(
+      'it authenticates 6 requests. 2 providers, 3 users per provider',
+      { plan: 12 },
+      async flags => {
+        const server = Hapi.server({
+          host: 'localhost',
+          port: 8080,
         })
-        await expect(
-          client._request(
-            'get',
-            'http://example.com/',
-            null,
-            { oauth_token: 'xcv' },
-            {
-              secret: 'secret',
-              desc: 'type',
-            }
-          )
-        ).to.reject('Failed obtaining undefined type')
+        await server.register(Bell)
 
-        Mock.clear()
-      })
-
-      it('errors on invalid response', async () => {
-        Mock.override('http://example.com/', '{x')
-
-        const client = new OAuth.Client({
-          name: 'prov',
-          provider: Bell.providers.twitter(),
+        // Set up GitHub provider & route
+        const githubMock = await Mock.v2(flags, { providerName: 'github' })
+        const githubProvider = Bell.providers.github()
+        Hoek.merge(githubProvider, githubMock.provider)
+        server.auth.strategy('github', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'github-client-id',
+          clientSecret: 'github-client-secret',
+          provider: githubProvider,
         })
-        await expect(
-          client._request(
-            'get',
-            'http://example.com/',
-            null,
-            { oauth_token: 'xcv' },
-            {
-              secret: 'secret',
-              desc: 'type',
-            }
-          )
-        ).to.reject('Received invalid payload from prov type endpoint')
-
-        Mock.clear()
-      })
-
-      it('errors on invalid response (no desc)', async () => {
-        Mock.override('http://example.com/', '{x')
-
-        const client = new OAuth.Client({
-          name: 'prov',
-          provider: Bell.providers.twitter(),
-        })
-        await expect(
-          client._request(
-            'get',
-            'http://example.com/',
-            null,
-            { oauth_token: 'xcv' },
-            { secret: 'secret' }
-          )
-        ).to.reject('Received invalid payload from prov resource endpoint')
-
-        Mock.clear()
-      })
-    })
-
-    describe('baseUri()', () => {
-      it('removes default port', () => {
-        expect(OAuth.Client.baseUri('http://example.com:80/x')).to.equal('http://example.com/x')
-        expect(OAuth.Client.baseUri('https://example.com:443/x')).to.equal('https://example.com/x')
-      })
-
-      it('keeps non-default port', () => {
-        expect(OAuth.Client.baseUri('http://example.com:8080/x')).to.equal(
-          'http://example.com:8080/x'
-        )
-        expect(OAuth.Client.baseUri('https://example.com:8080/x')).to.equal(
-          'https://example.com:8080/x'
-        )
-      })
-    })
-
-    describe('signature()', () => {
-      it('generates RFC 5849 example', () => {
-        const client = new OAuth.Client({
-          clientId: '9djdj82h48djs9d2',
-          clientSecret: 'j49sk3j29djd',
-          provider: Bell.providers.twitter(),
-        })
-        const tokenSecret = 'dh893hdasih9'
-
-        const params = {
-          b5: '=%3D',
-          a3: ['a', '2 q'],
-          'c@': '',
-          a2: 'r b',
-          c2: '',
-        }
-
-        const oauth = {
-          oauth_consumer_key: '9djdj82h48djs9d2',
-          oauth_token: 'kkk9d7dh3k39sjv7',
-          oauth_signature_method: 'HMAC-SHA1',
-          oauth_timestamp: '137131201',
-          oauth_nonce: '7d8f3e4a',
-        }
-
-        const signature = client.signature(
-          'post',
-          'http://example.com/request',
-          params,
-          oauth,
-          tokenSecret
-        )
-        expect(signature).to.equal('r6/TJjbCOr97/+UU0NsvSne7s5g=')
-      })
-
-      it('computes RSA-SHA1 signature', () => {
-        const client = new OAuth.Client({
-          clientId: '9djdj82h48djs9d2',
-          clientSecret: privateKey,
-          provider: {
-            protocol: 'oauth',
-            auth: 'https://example.com/oauth/authorize',
-            token: 'https://example.com/oauth/access-token',
-            temporary: 'https://example.com/oauth/request-token',
-            signatureMethod: 'RSA-SHA1',
+        server.route({
+          method: '*',
+          path: '/github-login',
+          options: {
+            auth: 'github',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
           },
         })
 
-        const params = {
-          b5: '=%3D',
-          a3: ['a', '2 q'],
-          'c@': '',
-          a2: 'r b',
-          c2: '',
-        }
-
-        const oauth = {
-          oauth_consumer_key: '9djdj82h48djs9d2',
-          oauth_token: 'kkk9d7dh3k39sjv7',
-          oauth_signature_method: 'RSA-SHA1',
-          oauth_timestamp: '137131201',
-          oauth_nonce: '7d8f3e4a',
-        }
-
-        const signature = client.signature(
-          'get',
-          'http://example.com/request',
-          params,
-          oauth,
-          privateKey
-        )
-        expect(signature).to.equal(
-          'mUUxSJS/cfLML3eZMlLK7eYxN36hWeBf4gGkAQbEc0bjz2GTH7YVaW2bQ+wwkHuWwxOTSLD70FJxVV4fmGIyw+/l7kt1FaJepL3Uc7IcARhUzsdT9HXRcHFjRkyDvBSssZA6LksQjGyblpYv5LXtUtVTm+IFR19ZwovFjIvNBxM='
-        )
-      })
-
-      it('handles array param with reveresed order', () => {
-        const client = new OAuth.Client({
-          clientId: '9djdj82h48djs9d2',
-          clientSecret: 'j49sk3j29djd',
-          provider: Bell.providers.twitter(),
+        // Set up Google provider & route
+        const googleMock = await Mock.v2(flags, { providerName: 'google' })
+        const googleProvider = Bell.providers.google()
+        Hoek.merge(googleProvider, googleMock.provider)
+        server.auth.strategy('google', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'google-client-id',
+          clientSecret: 'google-client-secret',
+          provider: googleProvider,
         })
-        const tokenSecret = 'dh893hdasih9'
-
-        const params = {
-          b5: '=%3D',
-          a3: ['2 q', 'a'],
-          'c@': '',
-          a2: 'r b',
-          c2: '',
-        }
-
-        const oauth = {
-          oauth_consumer_key: '9djdj82h48djs9d2',
-          oauth_token: 'kkk9d7dh3k39sjv7',
-          oauth_signature_method: 'HMAC-SHA1',
-          oauth_timestamp: '137131201',
-          oauth_nonce: '7d8f3e4a',
-        }
-
-        const signature = client.signature(
-          'post',
-          'http://example.com/request',
-          params,
-          oauth,
-          tokenSecret
-        )
-        expect(signature).to.equal('r6/TJjbCOr97/+UU0NsvSne7s5g=')
-      })
-
-      it('handles array param with same value', () => {
-        const client = new OAuth.Client({
-          clientId: '9djdj82h48djs9d2',
-          clientSecret: 'j49sk3j29djd',
-          provider: Bell.providers.twitter(),
+        server.route({
+          method: '*',
+          path: '/google-login',
+          options: {
+            auth: 'google',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
         })
-        const tokenSecret = 'dh893hdasih9'
 
-        const params = {
-          b5: '=%3D',
-          a3: ['a', 'a'],
-          'c@': '',
-          a2: 'r b',
-          c2: '',
+        const arrayOf6 = [...Array(6).keys()]
+        const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+
+        for (const requestStates of results) {
+          expect(requestStates[0]).to.equal(requestStates[1])
         }
 
-        const oauth = {
-          oauth_consumer_key: '9djdj82h48djs9d2',
-          oauth_token: 'kkk9d7dh3k39sjv7',
-          oauth_signature_method: 'HMAC-SHA1',
-          oauth_timestamp: '137131201',
-          oauth_nonce: '7d8f3e4a',
+        function runOAuthFlow(n) {
+          return new Promise(async resolve => {
+            const provider = n % 2 === 0 ? 'github' : 'google'
+            const mockServer = provider === 'github' ? githubMock.server : googleMock.server
+
+            const res1 = await delayedRequest(server, `/${provider}-login`)
+            const res1Params = new URLSearchParams(res1.headers.location)
+
+            const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+            const res2 = await delayedRequest(mockServer, res1.headers.location)
+            const res2Params = new URLSearchParams(res2.headers.location)
+
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'token',
+              serverUri: mockServer.info.uri,
+            })
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'profile',
+            })
+
+            const res3 = await server.inject({
+              url: res2.headers.location,
+              headers: { cookie },
+              validate: false,
+            })
+
+            expect(res3.statusCode).to.equal(200)
+
+            return resolve([res1Params.get('state'), res2Params.get('state')])
+          })
+        }
+      }
+    )
+
+    it(
+      'it authenticates 9 requests. 3 providers, 3 users per provider',
+      { plan: 18 },
+      async flags => {
+        const server = Hapi.server({
+          host: 'localhost',
+          port: 8080,
+        })
+        await server.register(Bell)
+
+        // Set up GitHub provider & route
+        const githubMock = await Mock.v2(flags, { providerName: 'github' })
+        const githubProvider = Bell.providers.github()
+        Hoek.merge(githubProvider, githubMock.provider)
+        server.auth.strategy('github', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'github-client-id',
+          clientSecret: 'github-client-secret',
+          provider: githubProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/github-login',
+          options: {
+            auth: 'github',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        // Set up Google provider & route
+        const googleMock = await Mock.v2(flags, { providerName: 'google' })
+        const googleProvider = Bell.providers.google()
+        Hoek.merge(googleProvider, googleMock.provider)
+        server.auth.strategy('google', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'google-client-id',
+          clientSecret: 'google-client-secret',
+          provider: googleProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/google-login',
+          options: {
+            auth: 'google',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        // Set up Azure provider & route
+        const azureMock = await Mock.v2(flags, { providerName: 'azure' })
+        const azureProvider = Bell.providers.azure()
+        Hoek.merge(azureProvider, azureMock.provider)
+        server.auth.strategy('azure', 'bell', {
+          password: 'cookie_encryption_password_secure',
+          isSecure: false,
+          clientId: 'azure-client-id',
+          clientSecret: 'azure-client-secret',
+          provider: azureProvider,
+        })
+        server.route({
+          method: '*',
+          path: '/azure-login',
+          options: {
+            auth: 'azure',
+            handler: function (request, h) {
+              return request.auth.credentials
+            },
+          },
+        })
+
+        const arrayOf9 = [...Array(9).keys()]
+        const results = await Promise.all(arrayOf9.map(runOAuthFlow))
+
+        for (const requestStates of results) {
+          expect(requestStates[0]).to.equal(requestStates[1])
         }
 
-        const signature = client.signature(
-          'post',
-          'http://example.com/request',
-          params,
-          oauth,
-          tokenSecret
-        )
-        expect(signature).to.equal('dub5m7j8nN7KtHBochesFDQHea4=')
+        function runOAuthFlow(n) {
+          return new Promise(async resolve => {
+            let provider
+            let mockServer
+            // Alternate between each provider based on `n`
+            if ([0, 3, 6].includes(n)) {
+              provider = 'github'
+              mockServer = githubMock.server
+            } else if ([1, 4, 7].includes(n)) {
+              provider = 'google'
+              mockServer = googleMock.server
+            } else {
+              provider = 'azure'
+              mockServer = azureMock.server
+            }
+
+            const res1 = await delayedRequest(server, `/${provider}-login`)
+            const res1Params = new URLSearchParams(res1.headers.location)
+
+            const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+            const res2 = await delayedRequest(mockServer, res1.headers.location)
+            const res2Params = new URLSearchParams(res2.headers.location)
+
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'token',
+              serverUri: mockServer.info.uri,
+            })
+            Mock.createProviderRequestMock({
+              provider,
+              type: 'profile',
+            })
+
+            const res3 = await server.inject({
+              url: res2.headers.location,
+              headers: { cookie },
+              validate: false,
+            })
+
+            expect(res3.statusCode).to.equal(200)
+
+            return resolve([res1Params.get('state'), res2Params.get('state')])
+          })
+        }
+      }
+    )
+
+    it('it authenticates 6 requests, all using different providers', { plan: 12 }, async flags => {
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
       })
+      await server.register(Bell)
+
+      // Set up Auth0 provider & route
+      const auth0Mock = await Mock.v2(flags, { providerName: 'auth0' })
+      const auth0Provider = Bell.providers.auth0({ domain: 'example.auth0.com' })
+      Hoek.merge(auth0Provider, auth0Mock.provider)
+      server.auth.strategy('auth0', 'bell', {
+        config: {
+          domain: 'example.auth0.com',
+        },
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'auth0-client-id',
+        clientSecret: 'auth0-client-secret',
+        provider: auth0Provider,
+      })
+
+      server.route({
+        method: '*',
+        path: '/auth0-login',
+        options: {
+          auth: 'auth0',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Azure provider & route
+      const azureMock = await Mock.v2(flags, { providerName: 'azure' })
+      const azureProvider = Bell.providers.azure()
+      Hoek.merge(azureProvider, azureMock.provider)
+      server.auth.strategy('azure', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'azure-client-id',
+        clientSecret: 'azure-client-secret',
+        provider: azureProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/azure-login',
+        options: {
+          auth: 'azure',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Facebook provider & route
+      const facebookMock = await Mock.v2(flags, { providerName: 'facebook' })
+      const facebookProvider = Bell.providers.facebook()
+      Hoek.merge(facebookProvider, facebookMock.provider)
+      server.auth.strategy('facebook', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'facebook-client-id',
+        clientSecret: 'facebook-client-secret',
+        provider: facebookProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/facebook-login',
+        options: {
+          auth: 'facebook',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up GitHub provider & route
+      const githubMock = await Mock.v2(flags, { providerName: 'github' })
+      const githubProvider = Bell.providers.github()
+      Hoek.merge(githubProvider, githubMock.provider)
+      server.auth.strategy('github', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'github-client-id',
+        clientSecret: 'github-client-secret',
+        provider: githubProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/github-login',
+        options: {
+          auth: 'github',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Google provider & route
+      const googleMock = await Mock.v2(flags, { providerName: 'google' })
+      const googleProvider = Bell.providers.google()
+      Hoek.merge(googleProvider, googleMock.provider)
+      server.auth.strategy('google', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'google-client-id',
+        clientSecret: 'google-client-secret',
+        provider: googleProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/google-login',
+        options: {
+          auth: 'google',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up LinkedIn provider & route
+      const linkedinMock = await Mock.v2(flags, { providerName: 'linkedin' })
+      const linkedinProvider = Bell.providers.linkedin()
+      Hoek.merge(linkedinProvider, linkedinMock.provider)
+      server.auth.strategy('linkedin', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'linkedin-client-id',
+        clientSecret: 'linkedin-client-secret',
+        provider: linkedinProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/linkedin-login',
+        options: {
+          auth: 'linkedin',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const providerMocks = [
+        { name: 'auth0', mock: auth0Mock },
+        { name: 'azure', mock: azureMock },
+        { name: 'facebook', mock: facebookMock },
+        { name: 'github', mock: githubMock },
+        { name: 'google', mock: googleMock },
+        { name: 'linkedin', mock: linkedinMock },
+      ]
+
+      const arrayOf6 = [...Array(6).keys()]
+      const results = await Promise.all(arrayOf6.map(runOAuthFlow))
+
+      for (const requestStates of results) {
+        expect(requestStates[0]).to.equal(requestStates[1])
+      }
+
+      function runOAuthFlow(n) {
+        return new Promise(async resolve => {
+          // Alternate between each provider based on `n`
+          const providerMockObj = providerMocks[n]
+          const provider = providerMockObj.name
+          const mockServer = providerMockObj.mock.server
+
+          const res1 = await delayedRequest(server, `/${provider}-login`)
+          const res1Params = new URLSearchParams(res1.headers.location)
+
+          const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+          const res2 = await delayedRequest(mockServer, res1.headers.location)
+          const res2Params = new URLSearchParams(res2.headers.location)
+
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'token',
+            serverUri: mockServer.info.uri,
+          })
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'profile',
+          })
+
+          const res3 = await server.inject({
+            url: res2.headers.location,
+            headers: { cookie },
+            validate: false,
+          })
+
+          expect(res3.statusCode).to.equal(200)
+
+          return resolve([res1Params.get('state'), res2Params.get('state')])
+        })
+      }
     })
 
-    describe('queryString()', () => {
-      it('handles params with non-string values', () => {
-        const params = {
-          a: [1, 2],
-          b: null,
-          c: [true, false],
-          d: Infinity,
+    it('it authenticates 100 requests with 6 different providers', { plan: 200 }, async flags => {
+      const server = Hapi.server({
+        host: 'localhost',
+        port: 8080,
+      })
+      await server.register(Bell)
+
+      // Set up Auth0 provider & route
+      const auth0Mock = await Mock.v2(flags, { providerName: 'auth0' })
+      const auth0Provider = Bell.providers.auth0({ domain: 'example.auth0.com' })
+      Hoek.merge(auth0Provider, auth0Mock.provider)
+      server.auth.strategy('auth0', 'bell', {
+        config: {
+          domain: 'example.auth0.com',
+        },
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'auth0-client-id',
+        clientSecret: 'auth0-client-secret',
+        provider: auth0Provider,
+      })
+
+      server.route({
+        method: '*',
+        path: '/auth0-login',
+        options: {
+          auth: 'auth0',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Azure provider & route
+      const azureMock = await Mock.v2(flags, { providerName: 'azure' })
+      const azureProvider = Bell.providers.azure()
+      Hoek.merge(azureProvider, azureMock.provider)
+      server.auth.strategy('azure', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'azure-client-id',
+        clientSecret: 'azure-client-secret',
+        provider: azureProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/azure-login',
+        options: {
+          auth: 'azure',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Facebook provider & route
+      const facebookMock = await Mock.v2(flags, { providerName: 'facebook' })
+      const facebookProvider = Bell.providers.facebook()
+      Hoek.merge(facebookProvider, facebookMock.provider)
+      server.auth.strategy('facebook', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'facebook-client-id',
+        clientSecret: 'facebook-client-secret',
+        provider: facebookProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/facebook-login',
+        options: {
+          auth: 'facebook',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up GitHub provider & route
+      const githubMock = await Mock.v2(flags, { providerName: 'github' })
+      const githubProvider = Bell.providers.github()
+      Hoek.merge(githubProvider, githubMock.provider)
+      server.auth.strategy('github', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'github-client-id',
+        clientSecret: 'github-client-secret',
+        provider: githubProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/github-login',
+        options: {
+          auth: 'github',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up Google provider & route
+      const googleMock = await Mock.v2(flags, { providerName: 'google' })
+      const googleProvider = Bell.providers.google()
+      Hoek.merge(googleProvider, googleMock.provider)
+      server.auth.strategy('google', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'google-client-id',
+        clientSecret: 'google-client-secret',
+        provider: googleProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/google-login',
+        options: {
+          auth: 'google',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      // Set up LinkedIn provider & route
+      const linkedinMock = await Mock.v2(flags, { providerName: 'linkedin' })
+      const linkedinProvider = Bell.providers.linkedin()
+      Hoek.merge(linkedinProvider, linkedinMock.provider)
+      server.auth.strategy('linkedin', 'bell', {
+        password: 'cookie_encryption_password_secure',
+        isSecure: false,
+        clientId: 'linkedin-client-id',
+        clientSecret: 'linkedin-client-secret',
+        provider: linkedinProvider,
+      })
+      server.route({
+        method: '*',
+        path: '/linkedin-login',
+        options: {
+          auth: 'linkedin',
+          handler: function (request, h) {
+            return request.auth.credentials
+          },
+        },
+      })
+
+      const providerMocks = [
+        { name: 'auth0', mock: auth0Mock },
+        { name: 'azure', mock: azureMock },
+        { name: 'facebook', mock: facebookMock },
+        { name: 'github', mock: githubMock },
+        { name: 'google', mock: googleMock },
+        { name: 'linkedin', mock: linkedinMock },
+      ]
+      let currentProviderIndex = 0
+
+      const arrayOf100 = [...Array(100).keys()]
+      const results = await Promise.all(arrayOf100.map(runOAuthFlow))
+
+      for (const requestStates of results) {
+        expect(requestStates[0]).to.equal(requestStates[1])
+      }
+
+      function runOAuthFlow(n) {
+        if (currentProviderIndex > 5) {
+          currentProviderIndex = 0
         }
 
-        expect(OAuth.Client.queryString(params)).to.equal('a=1&a=2&b=&c=true&c=false&d=')
-      })
+        return new Promise(async resolve => {
+          // Alternate between each provider based on `n`
+          const providerMockObj = providerMocks[currentProviderIndex]
+          const provider = providerMockObj.name
+          const mockServer = providerMockObj.mock.server
+          currentProviderIndex += 1
+
+          const res1 = await delayedRequest(server, `/${provider}-login`)
+          const res1Params = new URLSearchParams(res1.headers.location)
+
+          const cookie = res1.headers['set-cookie'][0].split(';')[0] + ';'
+
+          const res2 = await delayedRequest(mockServer, res1.headers.location)
+          const res2Params = new URLSearchParams(res2.headers.location)
+
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'token',
+            serverUri: mockServer.info.uri,
+          })
+          Mock.createProviderRequestMock({
+            provider,
+            type: 'profile',
+          })
+
+          const res3 = await server.inject({
+            url: res2.headers.location,
+            headers: { cookie },
+            validate: false,
+          })
+
+          expect(res3.statusCode).to.equal(200)
+
+          return resolve([res1Params.get('state'), res2Params.get('state')])
+        })
+      }
     })
+
+    function delayedRequest(server, url) {
+      return new Promise(resolve => {
+        // Delay 20-180ms
+        const delay = Math.random().toString().slice(2, 3) * 20 || 20
+
+        setTimeout(() => {
+          resolve(server.inject(url))
+        }, delay)
+      })
+    }
   })
 })

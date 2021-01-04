@@ -1,7 +1,7 @@
 'use strict'
 
+const nock = require('nock')
 const Querystring = require('querystring')
-
 const Boom = require('@hapi/boom')
 const Code = require('@hapi/code')
 const Hapi = require('@hapi/hapi')
@@ -11,6 +11,7 @@ const Wreck = require('@hapi/wreck')
 
 const internals = {
   wreck: null,
+  nock: null,
 }
 
 const expect = Code.expect
@@ -275,6 +276,10 @@ exports.v2 = async function (flags, options = {}) {
     token: mock.server.info.uri + '/token',
   }
 
+  if (options.providerName) {
+    mock.provider.name = options.providerName
+  }
+
   flags.onCleanup = () => {
     exports.clear()
     return mock.server.stop()
@@ -328,6 +333,178 @@ exports.override = function (uri, payload) {
   Wreck.post = override('post')
 
   return team.work
+}
+
+exports.nock = internals.nock = function ({
+  url,
+  method = 'get',
+  headers = {},
+  payload,
+  statusCode = 200,
+}) {
+  if (!url) throw 'Mock.nock: url required'
+  const mockURL = new URL(url)
+
+  return nock(mockURL.origin)
+    [method](mockURL.pathname)
+    .query(queryObj => queryObj) // Query must be returned in order to match linkedin profile request
+    .reply((uri, requestBody, next) => {
+      next(null, [statusCode, payload, headers])
+    })
+}
+
+exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
+  if (!provider || !type) {
+    throw 'Mock.createRequestMockForProvider: missing arguments'
+  }
+
+  if (type === 'token') {
+    if (!serverUri) throw 'Mock.createRequestMockForProvider: "serverUri" required for type "token"'
+
+    return internals.nock({
+      method: 'post',
+      url: `${serverUri}/token`,
+      payload: {
+        access_token: '456',
+        expires_in: 3600,
+      },
+    })
+  }
+
+  if (type === 'profile') {
+    // linkedin has two separate profile requests
+    if (provider === 'linkedin') {
+      internals.nock({
+        method: 'get',
+        url: getProfileURL() + '/me',
+        payload: getPayload('profile'),
+      })
+      internals.nock({
+        method: 'get',
+        url: getProfileURL() + '/emailAddress',
+        payload: getPayload('email'),
+      })
+    } else {
+      return internals.nock({
+        method: 'get',
+        url: getProfileURL(),
+        payload: getPayload(),
+      })
+    }
+  }
+
+  function getProfileURL() {
+    switch (provider) {
+      case 'auth0':
+        return 'https://example.auth0.com/userinfo'
+      case 'azure':
+        return 'https://graph.microsoft.com/v1.0/me'
+      case 'facebook':
+        return 'https://graph.facebook.com/v3.1/me'
+      case 'github':
+        return 'https://api.github.com/user'
+      case 'google':
+        return 'https://www.googleapis.com/oauth2/v3/userinfo'
+      case 'linkedin':
+        return 'https://api.linkedin.com/v2'
+      default:
+        return ''
+    }
+  }
+
+  function getPayload(type) {
+    switch (provider) {
+      case 'auth0':
+        return {
+          sub: 'auth0|1234567890',
+          name: 'steve smith',
+          given_name: 'steve',
+          family_name: 'smith',
+          email: 'steve@example.com',
+        }
+      case 'azure':
+        return {
+          id: '1234567890',
+          displayName: 'Sample Azure User',
+          userPrincipalName: 'sample@microsoft.com',
+        }
+      case 'facebook':
+        return {
+          id: '1234567890',
+          username: 'steve',
+          name: 'steve',
+          first_name: 'steve',
+          last_name: 'smith',
+          email: 'steve@example.com',
+          picture: {
+            data: {
+              is_silhouette: false,
+              url: 'https://example.com/profile.png',
+            },
+          },
+        }
+      case 'github':
+        return {
+          id: '1234567890',
+          username: 'githubuserjohnny',
+          displayName: 'johnny',
+          email: 'johnny@example.com',
+          raw: {
+            id: '1234567890',
+            login: 'githubuserjohnny',
+            name: 'johnny',
+            email: 'johnny@example.com',
+          },
+        }
+      case 'google':
+        return {
+          sub: '2345678901',
+          name: 'steve smith',
+          given_name: 'steve',
+          family_name: 'smith',
+          email: 'steve@example.com',
+        }
+      case 'linkedin':
+        if (type === 'profile') {
+          return {
+            id: '1234567890',
+            firstName: {
+              localized: {
+                en_US: 'steve',
+              },
+              preferredLocal: {
+                country: 'US',
+                language: 'en',
+              },
+            },
+            lastName: {
+              localized: {
+                en_US: 'smith',
+              },
+              preferredLocal: {
+                country: 'US',
+                language: 'en',
+              },
+            },
+          }
+        }
+
+        if (type === 'email') {
+          return {
+            elements: [
+              {
+                handle: 'urn:li:emailAddress:3775708763',
+                'handle~': {
+                  emailAddress: 'steve.smith@domain.com',
+                },
+              },
+            ],
+          }
+        }
+      default:
+        return {}
+    }
+  }
 }
 
 exports.clear = function () {
