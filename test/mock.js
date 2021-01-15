@@ -1,516 +1,537 @@
-'use strict'
+"use strict";
 
-const nock = require('nock')
-const Querystring = require('querystring')
-const Boom = require('@hapi/boom')
-const Code = require('@hapi/code')
-const Hapi = require('@hapi/hapi')
-const Hawk = require('@hapi/hawk')
-const Teamwork = require('@hapi/teamwork')
-const Wreck = require('@hapi/wreck')
+const nock = require("nock");
+const Querystring = require("querystring");
+const Boom = require("@hapi/boom");
+const Code = require("@hapi/code");
+const Hapi = require("@hapi/hapi");
+const Hawk = require("@hapi/hawk");
+const Teamwork = require("@hapi/teamwork");
+const Wreck = require("@hapi/wreck");
 
 const internals = {
   wreck: null,
   nock: null,
-}
+};
 
-const expect = Code.expect
+const expect = Code.expect;
 
-exports.CLIENT_ID_TESTER = internals.CLIENT_ID_TESTER = 'clientIdTester'
+exports.CLIENT_ID_TESTER = internals.CLIENT_ID_TESTER = "clientIdTester";
 
-exports.CLIENT_SECRET_TESTER = internals.CLIENT_SECRET_TESTER = 'clientSecretTester'
+exports.CLIENT_SECRET_TESTER = internals.CLIENT_SECRET_TESTER =
+  "clientSecretTester";
 
 exports.v1 = async function (flags, options = {}) {
   const mock = {
     options,
     tokens: {},
-    server: Hapi.server({ host: 'localhost' }),
-  }
+    server: Hapi.server({ host: "localhost" }),
+  };
 
-  mock.options.signatureMethod = mock.options.signatureMethod || 'HMAC-SHA1'
+  mock.options.signatureMethod = mock.options.signatureMethod || "HMAC-SHA1";
 
   mock.server.route([
     {
-      method: 'POST',
-      path: '/temporary',
+      method: "POST",
+      path: "/temporary",
       options: {
         handler: function (request, h) {
           if (mock.options.failTemporary) {
-            throw Boom.badRequest()
+            throw Boom.badRequest();
           }
 
           const header = Hawk.utils.parseAuthorizationHeader(
-            request.headers.authorization.replace(/OAuth/i, 'Hawk'),
+            request.headers.authorization.replace(/OAuth/i, "Hawk"),
             [
-              'realm',
-              'oauth_consumer_key',
-              'oauth_signature_method',
-              'oauth_callback',
-              'oauth_signature',
-              'oauth_version',
-              'oauth_timestamp',
-              'oauth_nonce',
+              "realm",
+              "oauth_consumer_key",
+              "oauth_signature_method",
+              "oauth_callback",
+              "oauth_signature",
+              "oauth_version",
+              "oauth_timestamp",
+              "oauth_nonce",
             ]
-          )
-          expect(header.oauth_callback).to.exist()
+          );
+          expect(header.oauth_callback).to.exist();
 
-          const token = String(Object.keys(mock.tokens).length + 1)
+          const token = String(Object.keys(mock.tokens).length + 1);
           mock.tokens[token] = {
             authorized: false,
-            secret: 'secret',
+            secret: "secret",
             callback: header.oauth_callback,
-          }
+          };
 
           const payload = {
             oauth_token: token,
-            oauth_token_secret: 'secret',
+            oauth_token_secret: "secret",
             oauth_callback_confirmed: true,
-          }
+          };
 
-          return h.response(Querystring.encode(payload)).type('application/x-www-form-urlencoded')
+          return h
+            .response(Querystring.encode(payload))
+            .type("application/x-www-form-urlencoded");
         },
       },
     },
     {
-      method: 'GET',
-      path: '/auth',
+      method: "GET",
+      path: "/auth",
       options: {
         handler: function (request, h) {
-          const token = mock.tokens[request.query.oauth_token]
-          expect(token).to.exist()
+          const token = mock.tokens[request.query.oauth_token];
+          expect(token).to.exist();
 
-          token.authorized = true
-          token.verifier = '123'
+          token.authorized = true;
+          token.verifier = "123";
 
-          const extra = Object.keys(request.query).length > 1 ? '&extra=true' : ''
+          const extra =
+            Object.keys(request.query).length > 1 ? "&extra=true" : "";
           return h.redirect(
             unescape(token.callback) +
-              '?oauth_token=' +
+              "?oauth_token=" +
               request.query.oauth_token +
-              '&oauth_verifier=' +
+              "&oauth_verifier=" +
               token.verifier +
               extra
-          )
+          );
         },
       },
     },
     {
-      method: 'POST',
-      path: '/token',
+      method: "POST",
+      path: "/token",
       options: {
         handler: function (request, h) {
           if (mock.options.failToken) {
-            throw Boom.badRequest()
+            throw Boom.badRequest();
           }
 
           const header = Hawk.utils.parseAuthorizationHeader(
-            request.headers.authorization.replace(/OAuth/i, 'Hawk'),
+            request.headers.authorization.replace(/OAuth/i, "Hawk"),
             [
-              'realm',
-              'oauth_consumer_key',
-              'oauth_token',
-              'oauth_signature_method',
-              'oauth_verifier',
-              'oauth_signature',
-              'oauth_version',
-              'oauth_timestamp',
-              'oauth_nonce',
+              "realm",
+              "oauth_consumer_key",
+              "oauth_token",
+              "oauth_signature_method",
+              "oauth_verifier",
+              "oauth_signature",
+              "oauth_version",
+              "oauth_timestamp",
+              "oauth_nonce",
             ]
-          )
-          const token = mock.tokens[header.oauth_token]
-          expect(token).to.exist()
-          expect(token.verifier).to.equal(header.oauth_verifier)
-          expect(token.authorized).to.equal(true)
+          );
+          const token = mock.tokens[header.oauth_token];
+          expect(token).to.exist();
+          expect(token.verifier).to.equal(header.oauth_verifier);
+          expect(token.authorized).to.equal(true);
 
           const payload = {
-            oauth_token: 'final',
-            oauth_token_secret: 'secret',
+            oauth_token: "final",
+            oauth_token_secret: "secret",
+          };
+
+          if (header.oauth_consumer_key === "twitter") {
+            payload.user_id = "1234567890";
+            payload.screen_name = "Steve Stevens";
           }
 
-          if (header.oauth_consumer_key === 'twitter') {
-            payload.user_id = '1234567890'
-            payload.screen_name = 'Steve Stevens'
-          }
-
-          return h.response(Querystring.encode(payload)).type('application/x-www-form-urlencoded')
+          return h
+            .response(Querystring.encode(payload))
+            .type("application/x-www-form-urlencoded");
         },
       },
     },
     {
-      method: '*',
-      path: '/resource',
+      method: "*",
+      path: "/resource",
       options: {
         handler: function (request, h) {
           const header = Hawk.utils.parseAuthorizationHeader(
-            request.headers.authorization.replace(/OAuth/i, 'Hawk'),
+            request.headers.authorization.replace(/OAuth/i, "Hawk"),
             [
-              'realm',
-              'oauth_consumer_key',
-              'oauth_token',
-              'oauth_signature_method',
-              'oauth_verifier',
-              'oauth_signature',
-              'oauth_version',
-              'oauth_timestamp',
-              'oauth_nonce',
+              "realm",
+              "oauth_consumer_key",
+              "oauth_token",
+              "oauth_signature_method",
+              "oauth_verifier",
+              "oauth_signature",
+              "oauth_version",
+              "oauth_timestamp",
+              "oauth_nonce",
             ]
-          )
-          expect(header.oauth_token).to.equal('final')
+          );
+          expect(header.oauth_token).to.equal("final");
 
-          return request.payload ? request.payload : 'some text reply'
+          return request.payload ? request.payload : "some text reply";
         },
       },
     },
-  ])
+  ]);
 
-  await mock.server.start()
-  mock.uri = mock.server.info.uri
+  await mock.server.start();
+  mock.uri = mock.server.info.uri;
 
   mock.provider = {
-    protocol: 'oauth',
-    temporary: mock.server.info.uri + '/temporary',
-    auth: mock.server.info.uri + '/auth',
-    token: mock.server.info.uri + '/token',
+    protocol: "oauth",
+    temporary: mock.server.info.uri + "/temporary",
+    auth: mock.server.info.uri + "/auth",
+    token: mock.server.info.uri + "/token",
     signatureMethod: mock.options.signatureMethod,
-  }
+  };
 
   flags.onCleanup = () => {
-    exports.clear()
-    return mock.server.stop()
-  }
+    exports.clear();
+    return mock.server.stop();
+  };
 
-  return mock
-}
+  return mock;
+};
 
 exports.v2 = async function (flags, options = {}) {
   const mock = {
     codes: {},
     useParamsAuth: options.useParamsAuth === false ? false : true,
-    server: Hapi.server({ host: 'localhost' }),
-  }
+    server: Hapi.server({ host: "localhost" }),
+  };
 
   mock.server.route([
     {
-      method: 'GET',
-      path: '/auth',
+      method: "GET",
+      path: "/auth",
       options: {
         handler: function (request, h) {
-          const code = String(Object.keys(mock.codes).length + 1)
+          const code = String(Object.keys(mock.codes).length + 1);
           mock.codes[code] = {
             redirect_uri: request.query.redirect_uri,
             client_id: request.query.client_id,
-          }
+          };
 
           return h.redirect(
-            request.query.redirect_uri + '?code=' + code + '&state=' + request.query.state
-          )
+            request.query.redirect_uri +
+              "?code=" +
+              code +
+              "&state=" +
+              request.query.state
+          );
         },
       },
     },
     {
-      method: 'POST',
-      path: '/token',
+      method: "POST",
+      path: "/token",
       options: {
         handler: function (request, h) {
-          const code = mock.codes[request.payload.code]
-          expect(code).to.exist()
-          expect(code.redirect_uri).to.equal(request.payload.redirect_uri)
+          const code = mock.codes[request.payload.code];
+          expect(code).to.exist();
+          expect(code.redirect_uri).to.equal(request.payload.redirect_uri);
           if (mock.useParamsAuth) {
-            expect(code.client_id).to.equal(request.payload.client_id)
-            expect(request.headers.authorization).to.be.undefined()
+            expect(code.client_id).to.equal(request.payload.client_id);
+            expect(request.headers.authorization).to.be.undefined();
           } else {
-            const basic = Buffer.from(request.headers.authorization.slice(6), 'base64').toString()
-            expect(basic).to.startWith(code.client_id)
-            expect(request.payload.client_id).to.be.undefined()
+            const basic = Buffer.from(
+              request.headers.authorization.slice(6),
+              "base64"
+            ).toString();
+            expect(basic).to.startWith(code.client_id);
+            expect(request.payload.client_id).to.be.undefined();
           }
 
           const payload = {
-            access_token: '456',
+            access_token: "456",
             expires_in: 3600,
-          }
+          };
 
           if (request.payload.code_verifier) {
-            payload.code_verifier = request.payload.code_verifier
+            payload.code_verifier = request.payload.code_verifier;
           }
 
-          if (code.client_id === 'instagram') {
+          if (code.client_id === "instagram") {
             payload.user = {
-              id: '123456789',
-              username: 'stevegraham',
-              full_name: 'Steve Graham',
+              id: "123456789",
+              username: "stevegraham",
+              full_name: "Steve Graham",
               profile_picture:
-                'http://distillery.s3.amazonaws.com/profiles/profile_1574083_75sq_1295469061.jpg',
-            }
+                "http://distillery.s3.amazonaws.com/profiles/profile_1574083_75sq_1295469061.jpg",
+            };
           }
 
-          if (code.client_id === 'vk') {
-            payload.user_id = '1234567890'
-            payload.email = 'steve@example.com'
+          if (code.client_id === "vk") {
+            payload.user_id = "1234567890";
+            payload.email = "steve@example.com";
           }
 
-          if (code.client_id === 'customSecret') {
-            payload.access_token = request.headers.mycustomtoken
+          if (code.client_id === "customSecret") {
+            payload.access_token = request.headers.mycustomtoken;
           }
 
           if (code.client_id === internals.CLIENT_ID_TESTER) {
-            expect(internals.CLIENT_SECRET_TESTER).to.equal(request.payload.client_secret)
+            expect(internals.CLIENT_SECRET_TESTER).to.equal(
+              request.payload.client_secret
+            );
           }
 
-          if (code.client_id === 'salesforce') {
-            payload.id = 'https://login.salesforce.com/id/foo/bar'
+          if (code.client_id === "salesforce") {
+            payload.id = "https://login.salesforce.com/id/foo/bar";
           }
 
-          return h.response(payload).code(options.code || 200)
+          return h.response(payload).code(options.code || 200);
         },
       },
     },
-  ])
+  ]);
 
-  await mock.server.start()
-  mock.uri = mock.server.info.uri
+  await mock.server.start();
+  mock.uri = mock.server.info.uri;
 
   mock.provider = {
-    protocol: 'oauth2',
+    protocol: "oauth2",
     useParamsAuth: mock.useParamsAuth,
-    auth: mock.server.info.uri + '/auth',
-    token: mock.server.info.uri + '/token',
-  }
+    auth: mock.server.info.uri + "/auth",
+    token: mock.server.info.uri + "/token",
+  };
 
   if (options.providerName) {
-    mock.provider.name = options.providerName
+    mock.provider.name = options.providerName;
   }
 
   flags.onCleanup = () => {
-    exports.clear()
-    return mock.server.stop()
-  }
+    exports.clear();
+    return mock.server.stop();
+  };
 
-  return mock
-}
+  return mock;
+};
 
 exports.override = function (uri, payload) {
-  const team = new Teamwork.Team()
+  const team = new Teamwork.Team();
 
   const override = function (method) {
     return async function (dest, ...args) {
       if (dest.indexOf(uri) === 0) {
-        if (typeof payload === 'function') {
-          const res = await payload(dest)
+        if (typeof payload === "function") {
+          const res = await payload(dest);
 
           if (res) {
-            return { res: { statusCode: 200 }, payload: JSON.stringify(res) }
+            return { res: { statusCode: 200 }, payload: JSON.stringify(res) };
           }
 
-          team.attend()
-          return { res: { statusCode: 200 }, payload: '{"x":1}' }
+          team.attend();
+          return { res: { statusCode: 200 }, payload: '{"x":1}' };
         }
 
         if (payload instanceof Error) {
-          const statusCode = payload && payload.output ? payload.output.statusCode : 400
-          return { res: { statusCode }, payload: JSON.stringify({ message: payload.message }) }
+          const statusCode =
+            payload && payload.output ? payload.output.statusCode : 400;
+          return {
+            res: { statusCode },
+            payload: JSON.stringify({ message: payload.message }),
+          };
         }
 
         if (payload === null) {
-          throw Boom.internal('unknown')
+          throw Boom.internal("unknown");
         }
 
         return {
           res: { statusCode: 200 },
-          payload: typeof payload === 'string' ? payload : JSON.stringify(payload),
-        }
+          payload:
+            typeof payload === "string" ? payload : JSON.stringify(payload),
+        };
       }
 
-      return internals.wreck[method](dest, ...args)
-    }
-  }
+      return internals.wreck[method](dest, ...args);
+    };
+  };
 
   internals.wreck = {
     get: Wreck.get.bind(Wreck),
     post: Wreck.post.bind(Wreck),
-  }
+  };
 
-  Wreck.get = override('get')
-  Wreck.post = override('post')
+  Wreck.get = override("get");
+  Wreck.post = override("post");
 
-  return team.work
-}
+  return team.work;
+};
 
 exports.nock = internals.nock = function ({
   url,
-  method = 'get',
+  method = "get",
   headers = {},
   payload,
   statusCode = 200,
 }) {
-  if (!url) throw 'Mock.nock: url required'
-  const mockURL = new URL(url)
+  if (!url) throw "Mock.nock: url required";
+  const mockURL = new URL(url);
 
   return nock(mockURL.origin)
     [method](mockURL.pathname)
-    .query(queryObj => queryObj) // Query must be returned in order to match linkedin profile request
+    .query((queryObj) => queryObj) // Query must be returned in order to match linkedin profile request
     .reply((uri, requestBody, next) => {
-      next(null, [statusCode, payload, headers])
-    })
-}
+      next(null, [statusCode, payload, headers]);
+    });
+};
 
 exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
   if (!provider || !type) {
-    throw 'Mock.createRequestMockForProvider: missing arguments'
+    throw "Mock.createRequestMockForProvider: missing arguments";
   }
 
-  if (type === 'token') {
-    if (!serverUri) throw 'Mock.createRequestMockForProvider: "serverUri" required for type "token"'
+  if (type === "token") {
+    if (!serverUri)
+      throw 'Mock.createRequestMockForProvider: "serverUri" required for type "token"';
 
     return internals.nock({
-      method: 'post',
+      method: "post",
       url: `${serverUri}/token`,
       payload: {
-        access_token: '456',
+        access_token: "456",
         expires_in: 3600,
       },
-    })
+    });
   }
 
-  if (type === 'profile') {
+  if (type === "profile") {
     // linkedin has two separate profile requests
-    if (provider === 'linkedin') {
+    if (provider === "linkedin") {
       internals.nock({
-        method: 'get',
-        url: getProfileURL() + '/me',
-        payload: getPayload('profile'),
-      })
+        method: "get",
+        url: getProfileURL() + "/me",
+        payload: getPayload("profile"),
+      });
       internals.nock({
-        method: 'get',
-        url: getProfileURL() + '/emailAddress',
-        payload: getPayload('email'),
-      })
+        method: "get",
+        url: getProfileURL() + "/emailAddress",
+        payload: getPayload("email"),
+      });
     } else {
       return internals.nock({
-        method: 'get',
+        method: "get",
         url: getProfileURL(),
         payload: getPayload(),
-      })
+      });
     }
   }
 
   function getProfileURL() {
     switch (provider) {
-      case 'auth0':
-        return 'https://example.auth0.com/userinfo'
-      case 'azure':
-        return 'https://graph.microsoft.com/v1.0/me'
-      case 'facebook':
-        return 'https://graph.facebook.com/v3.1/me'
-      case 'github':
-        return 'https://api.github.com/user'
-      case 'google':
-        return 'https://www.googleapis.com/oauth2/v3/userinfo'
-      case 'linkedin':
-        return 'https://api.linkedin.com/v2'
+      case "auth0":
+        return "https://example.auth0.com/userinfo";
+      case "azure":
+        return "https://graph.microsoft.com/v1.0/me";
+      case "facebook":
+        return "https://graph.facebook.com/v3.1/me";
+      case "github":
+        return "https://api.github.com/user";
+      case "google":
+        return "https://www.googleapis.com/oauth2/v3/userinfo";
+      case "linkedin":
+        return "https://api.linkedin.com/v2";
       default:
-        return ''
+        return "";
     }
   }
 
   function getPayload(type) {
     switch (provider) {
-      case 'auth0':
+      case "auth0":
         return {
-          sub: 'auth0|1234567890',
-          name: 'steve smith',
-          given_name: 'steve',
-          family_name: 'smith',
-          email: 'steve@example.com',
-        }
-      case 'azure':
+          sub: "auth0|1234567890",
+          name: "steve smith",
+          given_name: "steve",
+          family_name: "smith",
+          email: "steve@example.com",
+        };
+      case "azure":
         return {
-          id: '1234567890',
-          displayName: 'Sample Azure User',
-          userPrincipalName: 'sample@microsoft.com',
-        }
-      case 'facebook':
+          id: "1234567890",
+          displayName: "Sample Azure User",
+          userPrincipalName: "sample@microsoft.com",
+        };
+      case "facebook":
         return {
-          id: '1234567890',
-          username: 'steve',
-          name: 'steve',
-          first_name: 'steve',
-          last_name: 'smith',
-          email: 'steve@example.com',
+          id: "1234567890",
+          username: "steve",
+          name: "steve",
+          first_name: "steve",
+          last_name: "smith",
+          email: "steve@example.com",
           picture: {
             data: {
               is_silhouette: false,
-              url: 'https://example.com/profile.png',
+              url: "https://example.com/profile.png",
             },
           },
-        }
-      case 'github':
+        };
+      case "github":
         return {
-          id: '1234567890',
-          username: 'githubuserjohnny',
-          displayName: 'johnny',
-          email: 'johnny@example.com',
+          id: "1234567890",
+          username: "githubuserjohnny",
+          displayName: "johnny",
+          email: "johnny@example.com",
           raw: {
-            id: '1234567890',
-            login: 'githubuserjohnny',
-            name: 'johnny',
-            email: 'johnny@example.com',
+            id: "1234567890",
+            login: "githubuserjohnny",
+            name: "johnny",
+            email: "johnny@example.com",
           },
-        }
-      case 'google':
+        };
+      case "google":
         return {
-          sub: '2345678901',
-          name: 'steve smith',
-          given_name: 'steve',
-          family_name: 'smith',
-          email: 'steve@example.com',
-        }
-      case 'linkedin':
-        if (type === 'profile') {
+          sub: "2345678901",
+          name: "steve smith",
+          given_name: "steve",
+          family_name: "smith",
+          email: "steve@example.com",
+        };
+      case "linkedin":
+        if (type === "profile") {
           return {
-            id: '1234567890',
+            id: "1234567890",
             firstName: {
               localized: {
-                en_US: 'steve',
+                en_US: "steve",
               },
               preferredLocal: {
-                country: 'US',
-                language: 'en',
+                country: "US",
+                language: "en",
               },
             },
             lastName: {
               localized: {
-                en_US: 'smith',
+                en_US: "smith",
               },
               preferredLocal: {
-                country: 'US',
-                language: 'en',
+                country: "US",
+                language: "en",
               },
             },
-          }
+          };
         }
 
-        if (type === 'email') {
+        if (type === "email") {
           return {
             elements: [
               {
-                handle: 'urn:li:emailAddress:3775708763',
-                'handle~': {
-                  emailAddress: 'steve.smith@domain.com',
+                handle: "urn:li:emailAddress:3775708763",
+                "handle~": {
+                  emailAddress: "steve.smith@domain.com",
                 },
               },
             ],
-          }
+          };
         }
       default:
-        return {}
+        return {};
     }
   }
-}
+};
 
 exports.clear = function () {
   if (internals.wreck) {
-    Wreck.get = internals.wreck.get
-    Wreck.post = internals.wreck.post
-    internals.wreck = null
+    Wreck.get = internals.wreck.get;
+    Wreck.post = internals.wreck.post;
+    internals.wreck = null;
   }
-}
+};
