@@ -1,6 +1,6 @@
 {
   "name": "@userfront/bell",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "description": "Third-party login plugin for hapi",
   "main": "lib/index.js",
   "engines": {
