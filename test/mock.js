@@ -414,6 +414,26 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     }
   }
 
+  if (type === "profile-no-email") {
+    // github email is not guaranteed in profile response
+    return internals.nock({
+      method: "get",
+      url: getProfileURL(),
+      payload: getPayload("profile-no-email"),
+    });
+  }
+
+  if (type === "email") {
+    // github has a separate endpoint for fetching user's emails if not provided in profile
+    if (provider === "github") {
+      return internals.nock({
+        method: "get",
+        url: getProfileURL() + "/emails",
+        payload: getPayload("email"),
+      });
+    }
+  }
+
   function getProfileURL() {
     switch (provider) {
       case "auth0":
@@ -465,18 +485,53 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           },
         };
       case "github":
-        return {
-          id: "1234567890",
-          username: "githubuserjohnny",
-          displayName: "johnny",
-          email: "johnny@example.com",
-          raw: {
+        if (type === "profile") {
+          return {
+            id: "1234567890",
+            username: "githubuserjohnny",
+            displayName: "johnny",
+            email: "johnny@example.com",
+            raw: {
+              id: "1234567890",
+              login: "githubuserjohnny",
+              name: "johnny",
+              email: "johnny@example.com",
+            },
+          };
+        }
+
+        if (type === "profile-no-email") {
+          return {
             id: "1234567890",
             login: "githubuserjohnny",
             name: "johnny",
-            email: "johnny@example.com",
-          },
-        };
+            email: null,
+          };
+        }
+
+        if (type === "email") {
+          return [
+            {
+              email: "7221494+johnny@users.noreply.github.com",
+              primary: false,
+              verified: true,
+              visibility: null,
+            },
+            {
+              email: "johnny@example.com",
+              primary: true,
+              verified: true,
+              visibility: null,
+            },
+            {
+              email: "johnny@gmail.com",
+              primary: false,
+              verified: true,
+              visibility: null,
+            },
+          ];
+        }
+
       case "google":
         return {
           sub: "2345678901",
