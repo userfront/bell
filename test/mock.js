@@ -441,7 +441,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
       case "azure":
         return "https://graph.microsoft.com/v1.0/me";
       case "facebook":
-        return "https://graph.facebook.com/v3.1/me";
+        return "https://graph.facebook.com/v9.0/me";
       case "github":
         return "https://api.github.com/user";
       case "google":
