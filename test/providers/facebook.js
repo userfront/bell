@@ -24,7 +24,6 @@ describe("facebook", () => {
 
     const profile = {
       id: "1234567890",
-      username: "steve",
       name: "steve",
       first_name: "steve",
       last_name: "smith",
@@ -37,7 +36,7 @@ describe("facebook", () => {
       },
     };
 
-    Mock.override("https://graph.facebook.com/v3.1/me", profile);
+    Mock.override("https://graph.facebook.com/v9.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -76,7 +75,6 @@ describe("facebook", () => {
       state: { query: {} },
       profile: {
         id: "1234567890",
-        username: "steve",
         displayName: "steve",
         name: {
           first: "steve",
@@ -107,7 +105,6 @@ describe("facebook", () => {
 
     const profile = {
       id: "1234567890",
-      username: "steve",
       name: "steve",
       first_name: "steve",
       last_name: "smith",
@@ -120,7 +117,7 @@ describe("facebook", () => {
       },
     };
 
-    Mock.override("https://graph.facebook.com/v3.1/me", profile);
+    Mock.override("https://graph.facebook.com/v9.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -159,7 +156,6 @@ describe("facebook", () => {
       state: { query: {} },
       profile: {
         id: "1234567890",
-        username: "steve",
         displayName: "steve",
         name: {
           first: "steve",
@@ -190,7 +186,6 @@ describe("facebook", () => {
 
     const profile = {
       id: "1234567890",
-      username: "steve",
       name: "steve",
       first_name: "steve",
       last_name: "smith",
@@ -203,7 +198,7 @@ describe("facebook", () => {
       },
     };
 
-    Mock.override("https://graph.facebook.com/v3.1/me", profile);
+    Mock.override("https://graph.facebook.com/v9.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -244,7 +239,6 @@ describe("facebook", () => {
       state: { query: {} },
       profile: {
         id: "1234567890",
-        username: "steve",
         displayName: "steve",
         name: {
           first: "steve",
