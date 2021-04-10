@@ -27,6 +27,7 @@ describe("github", () => {
       login: "steve",
       name: "steve",
       email: "steve@example.com",
+      avatar_url: "https://github.com/images/error/octocat_happy.gif",
     };
 
     Mock.override("https://api.github.com/user", profile);
@@ -71,6 +72,7 @@ describe("github", () => {
         username: "steve",
         displayName: "steve",
         email: "steve@example.com",
+        image: "https://github.com/images/error/octocat_happy.gif",
         raw: profile,
       },
     });
@@ -89,6 +91,7 @@ describe("github", () => {
       login: "steve",
       name: "steve",
       email: "steve@example.com",
+      avatar_url: "https://github.com/images/error/octocat_happy.gif",
     };
 
     Mock.override("http://example.com/api/v3/user", profile);
@@ -133,6 +136,7 @@ describe("github", () => {
         username: "steve",
         displayName: "steve",
         email: "steve@example.com",
+        image: "https://github.com/images/error/octocat_happy.gif",
         raw: profile,
       },
     });
@@ -198,6 +202,7 @@ describe("github", () => {
       login: "githubuserjohnny",
       name: "johnny",
       email: "johnny@example.com",
+      avatar_url: "https://github.com/images/error/octocat_happy.gif",
     };
     expect(res3.result).to.equal({
       provider: "custom",
@@ -211,6 +216,7 @@ describe("github", () => {
         username: "githubuserjohnny",
         displayName: "johnny",
         email: "johnny@example.com",
+        image: "https://github.com/images/error/octocat_happy.gif",
         raw: profile,
       },
     });

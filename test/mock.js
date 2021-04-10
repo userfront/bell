@@ -491,11 +491,13 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             username: "githubuserjohnny",
             displayName: "johnny",
             email: "johnny@example.com",
+            avatar_url: "https://github.com/images/error/octocat_happy.gif",
             raw: {
               id: "1234567890",
               login: "githubuserjohnny",
               name: "johnny",
               email: "johnny@example.com",
+              avatar_url: "https://github.com/images/error/octocat_happy.gif",
             },
           };
         }
@@ -506,6 +508,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             login: "githubuserjohnny",
             name: "johnny",
             email: null,
+            avatar_url: "https://github.com/images/error/octocat_happy.gif",
           };
         }
 
@@ -539,7 +542,9 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           given_name: "steve",
           family_name: "smith",
           email: "steve@example.com",
+          picture: "https://lh4.googleusercontent.com/-kw-iMgD",
         };
+
       case "linkedin":
         if (type === "profile") {
           return {
@@ -561,6 +566,9 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
                 country: "US",
                 language: "en",
               },
+            },
+            profilePicture: {
+              displayImage: "urn:li:digitalmediaAsset:C4D00AAAAbBCDEFGhiJ",
             },
           };
         }
