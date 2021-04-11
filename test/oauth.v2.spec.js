@@ -1311,14 +1311,14 @@ describe("Bell v2", () => {
       const custom = Bell.providers.facebook();
       Hoek.merge(custom, mock.provider);
 
-      const override = Mock.override(
-        "https://graph.facebook.com/v9.0/me",
-        (uri) => {
+      const override = new Promise((resolve) => {
+        Mock.override("https://graph.facebook.com/v9.0/me", (uri) => {
           expect(uri).to.equal(
             "https://graph.facebook.com/v9.0/me?appsecret_proof=d32b1d35fd115c4a496e06fd8df67eed8057688b17140a2cef365cb235817102&fields=id%2Cemail%2Cpicture%2Cname%2Cfirst_name%2Cmiddle_name%2Clast_name%2Clink%2Clocale%2Ctimezone%2Cupdated_time%2Cverified%2Cgender"
           );
-        }
-      );
+          resolve();
+        });
+      });
 
       server.auth.strategy("custom", "bell", {
         password: "cookie_encryption_password_secure",
@@ -1367,14 +1367,14 @@ describe("Bell v2", () => {
       const custom = Bell.providers.facebook();
       Hoek.merge(custom, mock.provider);
 
-      const override = Mock.override(
-        "https://graph.facebook.com/v9.0/me",
-        (uri) => {
+      const override = new Promise((resolve) => {
+        Mock.override("https://graph.facebook.com/v9.0/me", (uri) => {
           expect(uri).to.equal(
             "https://graph.facebook.com/v9.0/me?appsecret_proof=d32b1d35fd115c4a496e06fd8df67eed8057688b17140a2cef365cb235817102&fields=id%2Cemail%2Cpicture%2Cname%2Cfirst_name%2Cmiddle_name%2Clast_name%2Clink%2Clocale%2Ctimezone%2Cupdated_time%2Cverified%2Cgender"
           );
-        }
-      );
+          resolve();
+        });
+      });
 
       server.auth.strategy("custom", "bell", {
         password: "cookie_encryption_password_secure",
@@ -1844,7 +1844,12 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
-
+            if (provider === "azure") {
+              Mock.createProviderRequestMock({
+                provider,
+                type: "image",
+              });
+            }
             const res3 = await server.inject({
               url: res2.headers.location,
               headers: { cookie },
@@ -2050,7 +2055,12 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
-
+            if (provider === "azure") {
+              Mock.createProviderRequestMock({
+                provider,
+                type: "image",
+              });
+            }
             const res3 = await server.inject({
               url: res2.headers.location,
               headers: { cookie },
@@ -2262,6 +2272,12 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
+            if (provider === "azure") {
+              Mock.createProviderRequestMock({
+                provider,
+                type: "image",
+              });
+            }
 
             const res3 = await server.inject({
               url: res2.headers.location,

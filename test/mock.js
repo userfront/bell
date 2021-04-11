@@ -312,6 +312,18 @@ exports.override = function (uri, payload) {
         if (typeof payload === "function") {
           const res = await payload(dest);
 
+          if (
+            res.headers &&
+            res.headers["Content-Type"] &&
+            (res.headers["Content-Type"] === "image/jpg" ||
+              res.headers["Content-Type"] === "image/jpeg")
+          ) {
+            return {
+              res: { ...res.headers },
+              payload: res.payload,
+            };
+          }
+
           if (res) {
             return { res: { statusCode: 200 }, payload: JSON.stringify(res) };
           }
@@ -358,8 +370,8 @@ exports.override = function (uri, payload) {
 exports.nock = internals.nock = function ({
   url,
   method = "get",
-  headers = {},
-  payload,
+  responseHeaders = {},
+  responsePayload,
   statusCode = 200,
 }) {
   if (!url) throw "Mock.nock: url required";
@@ -369,7 +381,7 @@ exports.nock = internals.nock = function ({
     [method](mockURL.pathname)
     .query((queryObj) => queryObj) // Query must be returned in order to match linkedin profile request
     .reply((uri, requestBody, next) => {
-      next(null, [statusCode, payload, headers]);
+      next(null, [statusCode, responsePayload, responseHeaders]);
     });
 };
 
@@ -385,7 +397,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     return internals.nock({
       method: "post",
       url: `${serverUri}/token`,
-      payload: {
+      responsePayload: {
         access_token: "456",
         expires_in: 3600,
       },
@@ -398,18 +410,18 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
       internals.nock({
         method: "get",
         url: getProfileURL() + "/me",
-        payload: getPayload("profile"),
+        responsePayload: getResponsePayload("profile"),
       });
       internals.nock({
         method: "get",
         url: getProfileURL() + "/emailAddress",
-        payload: getPayload("email"),
+        responsePayload: getResponsePayload("email"),
       });
     } else {
       return internals.nock({
         method: "get",
         url: getProfileURL(),
-        payload: getPayload(),
+        responsePayload: getResponsePayload(),
       });
     }
   }
@@ -419,7 +431,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     return internals.nock({
       method: "get",
       url: getProfileURL(),
-      payload: getPayload("profile-no-email"),
+      responsePayload: getResponsePayload("profile-no-email"),
     });
   }
 
@@ -429,7 +441,21 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
       return internals.nock({
         method: "get",
         url: getProfileURL() + "/emails",
-        payload: getPayload("email"),
+        responsePayload: getResponsePayload("email"),
+      });
+    }
+  }
+
+  if (type === "image") {
+    // azure has a separate endpoint for fetching user's image
+    if (provider === "azure") {
+      return internals.nock({
+        method: "get",
+        url: getProfileURL() + "/photos/240x240/$value",
+        responseHeaders: {
+          "Content-Type": "image/jpg",
+        },
+        responsePayload: getResponsePayload("image"),
       });
     }
   }
@@ -453,7 +479,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     }
   }
 
-  function getPayload(type) {
+  function getResponsePayload(type) {
     switch (provider) {
       case "auth0":
         return {
@@ -463,12 +489,20 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           family_name: "smith",
           email: "steve@example.com",
         };
+
       case "azure":
-        return {
-          id: "1234567890",
-          displayName: "Sample Azure User",
-          userPrincipalName: "sample@microsoft.com",
-        };
+        if (type === "profile") {
+          return {
+            id: "1234567890",
+            displayName: "Sample Azure User",
+            userPrincipalName: "sample@microsoft.com",
+          };
+        }
+
+        if (type === "image") {
+          return Buffer.from("profile image", "binary");
+        }
+
       case "facebook":
         return {
           id: "1234567890",
@@ -484,6 +518,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             },
           },
         };
+
       case "github":
         if (type === "profile") {
           return {
@@ -585,6 +620,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             ],
           };
         }
+
       default:
         return {};
     }

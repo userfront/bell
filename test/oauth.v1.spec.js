@@ -455,14 +455,14 @@ describe("Bell", () => {
       const custom = Bell.providers.twitter();
       Hoek.merge(custom, mock.provider);
 
-      const override = Mock.override(
-        "https://api.twitter.com/1.1/users/show.json",
-        (uri) => {
+      const override = new Promise((resolve) => {
+        Mock.override("https://api.twitter.com/1.1/users/show.json", (uri) => {
           expect(uri).to.equal(
             "https://api.twitter.com/1.1/users/show.json?user_id=1234567890&fields=id%2Cemail"
           );
-        }
-      );
+          resolve();
+        });
+      });
 
       server.auth.strategy("custom", "bell", {
         password: "cookie_encryption_password_secure",
