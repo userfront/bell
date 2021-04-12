@@ -312,18 +312,6 @@ exports.override = function (uri, payload) {
         if (typeof payload === "function") {
           const res = await payload(dest);
 
-          if (
-            res.headers &&
-            res.headers["Content-Type"] &&
-            (res.headers["Content-Type"] === "image/jpg" ||
-              res.headers["Content-Type"] === "image/jpeg")
-          ) {
-            return {
-              res: { ...res.headers },
-              payload: res.payload,
-            };
-          }
-
           if (res) {
             return { res: { statusCode: 200 }, payload: JSON.stringify(res) };
           }
@@ -446,20 +434,6 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     }
   }
 
-  if (type === "image") {
-    // azure has a separate endpoint for fetching user's image
-    if (provider === "azure") {
-      return internals.nock({
-        method: "get",
-        url: getProfileURL() + "/photos/240x240/$value",
-        responseHeaders: {
-          "Content-Type": "image/jpg",
-        },
-        responsePayload: getResponsePayload("image"),
-      });
-    }
-  }
-
   function getProfileURL() {
     switch (provider) {
       case "auth0":
@@ -491,17 +465,11 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
         };
 
       case "azure":
-        if (type === "profile") {
-          return {
-            id: "1234567890",
-            displayName: "Sample Azure User",
-            userPrincipalName: "sample@microsoft.com",
-          };
-        }
-
-        if (type === "image") {
-          return Buffer.from("profile image", "binary");
-        }
+        return {
+          id: "1234567890",
+          displayName: "Sample Azure User",
+          userPrincipalName: "sample@microsoft.com",
+        };
 
       case "facebook":
         return {

@@ -1844,12 +1844,7 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
-            if (provider === "azure") {
-              Mock.createProviderRequestMock({
-                provider,
-                type: "image",
-              });
-            }
+
             const res3 = await server.inject({
               url: res2.headers.location,
               headers: { cookie },
@@ -2055,12 +2050,7 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
-            if (provider === "azure") {
-              Mock.createProviderRequestMock({
-                provider,
-                type: "image",
-              });
-            }
+
             const res3 = await server.inject({
               url: res2.headers.location,
               headers: { cookie },
@@ -2272,12 +2262,6 @@ describe("Bell v2", () => {
               provider,
               type: "profile",
             });
-            if (provider === "azure") {
-              Mock.createProviderRequestMock({
-                provider,
-                type: "image",
-              });
-            }
 
             const res3 = await server.inject({
               url: res2.headers.location,

@@ -20,8 +20,6 @@ describe("azure", () => {
       displayName: "Sample AD User",
       userPrincipalName: "sample@microsoft.com",
     };
-    const imageBinary = Buffer.from("profile image", "binary");
-    const base64Image = Buffer.from(imageBinary).toString("base64");
 
     const mock = await Mock.v2(flags);
     const server = Hapi.server({ host: "localhost", port: 80 });
@@ -30,20 +28,7 @@ describe("azure", () => {
     const custom = Bell.providers.azure();
     Hoek.merge(custom, mock.provider);
 
-    // https://docs.microsoft.com/en-us/graph/api/profilephoto-get?view=graph-rest-1.0#example-2-get-the-48x48-photo-for-the-signed-in-user
-    Mock.override("https://graph.microsoft.com/v1.0/me", (dest) => {
-      if (dest.includes("photos")) {
-        return {
-          headers: {
-            statusCode: 200,
-            "Content-Type": "image/jpg",
-          },
-          payload: imageBinary,
-        };
-      }
-
-      return profile;
-    });
+    Mock.override("https://graph.microsoft.com/v1.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -84,7 +69,6 @@ describe("azure", () => {
         id: "1234567890",
         displayName: "Sample AD User",
         email: "sample@microsoft.com",
-        image: `data:image/jpeg;base64,${base64Image}`,
         raw: profile,
       },
     });
@@ -96,8 +80,6 @@ describe("azure", () => {
       displayName: "Sample AD User",
       mail: "sample@microsoft.com",
     };
-    const imageBinary = Buffer.from("profile image", "binary");
-    const base64Image = Buffer.from(imageBinary).toString("base64");
 
     const mock = await Mock.v2(flags);
     const server = Hapi.server({ host: "localhost", port: 80 });
@@ -106,19 +88,7 @@ describe("azure", () => {
     const custom = Bell.providers.azure();
     Hoek.merge(custom, mock.provider);
 
-    Mock.override("https://graph.microsoft.com/v1.0/me", (dest) => {
-      if (dest.includes("photos")) {
-        return {
-          headers: {
-            statusCode: 200,
-            "Content-Type": "image/jpg",
-          },
-          payload: imageBinary,
-        };
-      }
-
-      return profile;
-    });
+    Mock.override("https://graph.microsoft.com/v1.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -159,7 +129,6 @@ describe("azure", () => {
         id: "1234567890",
         displayName: "Sample AD User",
         email: "sample@microsoft.com",
-        image: `data:image/jpeg;base64,${base64Image}`,
         raw: profile,
       },
     });
@@ -179,22 +148,7 @@ describe("azure", () => {
       mail: "sample@microsoft.com",
     };
 
-    const imageBinary = Buffer.from("profile image", "binary");
-    const base64Image = Buffer.from(imageBinary).toString("base64");
-
-    Mock.override("https://graph.microsoft.com/v1.0/me", (dest) => {
-      if (dest.includes("photos")) {
-        return {
-          headers: {
-            statusCode: 200,
-            "Content-Type": "image/jpg",
-          },
-          payload: imageBinary,
-        };
-      }
-
-      return profile;
-    });
+    Mock.override("https://graph.microsoft.com/v1.0/me", profile);
 
     server.auth.strategy("custom", "bell", {
       password: "cookie_encryption_password_secure",
@@ -235,7 +189,6 @@ describe("azure", () => {
         id: "1234567890",
         displayName: "Sample AD User",
         email: "sample@microsoft.com",
-        image: `data:image/jpeg;base64,${base64Image}`,
         raw: profile,
       },
     });
