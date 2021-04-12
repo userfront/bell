@@ -28,6 +28,7 @@ describe("google", () => {
       given_name: "steve",
       family_name: "smith",
       email: "steve@example.com",
+      picture: "https://lh4.googleusercontent.com/-kw-iMgD",
     };
 
     Mock.override("https://www.googleapis.com/oauth2/v3/userinfo", profile);
@@ -75,6 +76,7 @@ describe("google", () => {
           family_name: "smith",
         },
         email: "steve@example.com",
+        image: "https://lh4.googleusercontent.com/-kw-iMgD",
         raw: profile,
       },
     });

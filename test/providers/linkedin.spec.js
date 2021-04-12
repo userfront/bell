@@ -42,6 +42,9 @@ describe("linkedin", () => {
           language: "en",
         },
       },
+      profilePicture: {
+        displayImage: "urn:li:digitalmediaAsset:C4D00AAAAbBCDEFGhiJ",
+      },
     };
 
     const email = {
@@ -105,6 +108,7 @@ describe("linkedin", () => {
           last: "smith",
         },
         email: "steve.smith@domain.com",
+        image: "urn:li:digitalmediaAsset:C4D00AAAAbBCDEFGhiJ",
         raw: {
           profile,
           email,
@@ -144,6 +148,9 @@ describe("linkedin", () => {
           country: "US",
           language: "en",
         },
+      },
+      profilePicture: {
+        displayImage: "urn:li:digitalmediaAsset:C4D00AAAAbBCDEFGhiJ",
       },
     };
 

@@ -358,8 +358,8 @@ exports.override = function (uri, payload) {
 exports.nock = internals.nock = function ({
   url,
   method = "get",
-  headers = {},
-  payload,
+  responseHeaders = {},
+  responsePayload,
   statusCode = 200,
 }) {
   if (!url) throw "Mock.nock: url required";
@@ -369,7 +369,7 @@ exports.nock = internals.nock = function ({
     [method](mockURL.pathname)
     .query((queryObj) => queryObj) // Query must be returned in order to match linkedin profile request
     .reply((uri, requestBody, next) => {
-      next(null, [statusCode, payload, headers]);
+      next(null, [statusCode, responsePayload, responseHeaders]);
     });
 };
 
@@ -385,7 +385,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     return internals.nock({
       method: "post",
       url: `${serverUri}/token`,
-      payload: {
+      responsePayload: {
         access_token: "456",
         expires_in: 3600,
       },
@@ -398,18 +398,18 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
       internals.nock({
         method: "get",
         url: getProfileURL() + "/me",
-        payload: getPayload("profile"),
+        responsePayload: getResponsePayload("profile"),
       });
       internals.nock({
         method: "get",
         url: getProfileURL() + "/emailAddress",
-        payload: getPayload("email"),
+        responsePayload: getResponsePayload("email"),
       });
     } else {
       return internals.nock({
         method: "get",
         url: getProfileURL(),
-        payload: getPayload(),
+        responsePayload: getResponsePayload(),
       });
     }
   }
@@ -419,7 +419,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     return internals.nock({
       method: "get",
       url: getProfileURL(),
-      payload: getPayload("profile-no-email"),
+      responsePayload: getResponsePayload("profile-no-email"),
     });
   }
 
@@ -429,7 +429,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
       return internals.nock({
         method: "get",
         url: getProfileURL() + "/emails",
-        payload: getPayload("email"),
+        responsePayload: getResponsePayload("email"),
       });
     }
   }
@@ -453,7 +453,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
     }
   }
 
-  function getPayload(type) {
+  function getResponsePayload(type) {
     switch (provider) {
       case "auth0":
         return {
@@ -463,12 +463,14 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           family_name: "smith",
           email: "steve@example.com",
         };
+
       case "azure":
         return {
           id: "1234567890",
           displayName: "Sample Azure User",
           userPrincipalName: "sample@microsoft.com",
         };
+
       case "facebook":
         return {
           id: "1234567890",
@@ -484,6 +486,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             },
           },
         };
+
       case "github":
         if (type === "profile") {
           return {
@@ -491,11 +494,13 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             username: "githubuserjohnny",
             displayName: "johnny",
             email: "johnny@example.com",
+            avatar_url: "https://github.com/images/error/octocat_happy.gif",
             raw: {
               id: "1234567890",
               login: "githubuserjohnny",
               name: "johnny",
               email: "johnny@example.com",
+              avatar_url: "https://github.com/images/error/octocat_happy.gif",
             },
           };
         }
@@ -506,6 +511,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             login: "githubuserjohnny",
             name: "johnny",
             email: null,
+            avatar_url: "https://github.com/images/error/octocat_happy.gif",
           };
         }
 
@@ -539,7 +545,9 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
           given_name: "steve",
           family_name: "smith",
           email: "steve@example.com",
+          picture: "https://lh4.googleusercontent.com/-kw-iMgD",
         };
+
       case "linkedin":
         if (type === "profile") {
           return {
@@ -562,6 +570,9 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
                 language: "en",
               },
             },
+            profilePicture: {
+              displayImage: "urn:li:digitalmediaAsset:C4D00AAAAbBCDEFGhiJ",
+            },
           };
         }
 
@@ -577,6 +588,7 @@ exports.createProviderRequestMock = function ({ provider, type, serverUri }) {
             ],
           };
         }
+
       default:
         return {};
     }

@@ -82,12 +82,7 @@ describe("facebook", () => {
           middle: undefined,
         },
         email: "steve@example.com",
-        picture: {
-          data: {
-            is_silhouette: false,
-            url: "https://example.com/profile.png",
-          },
-        },
+        image: "https://example.com/profile.png",
         raw: profile,
       },
     });
@@ -163,12 +158,7 @@ describe("facebook", () => {
           middle: undefined,
         },
         email: "steve@example.com",
-        picture: {
-          data: {
-            is_silhouette: false,
-            url: "https://example.com/profile.png",
-          },
-        },
+        image: "https://example.com/profile.png",
         raw: profile,
       },
     });
@@ -246,12 +236,7 @@ describe("facebook", () => {
           middle: undefined,
         },
         email: "steve@example.com",
-        picture: {
-          data: {
-            is_silhouette: false,
-            url: "https://example.com/profile.png",
-          },
-        },
+        image: "https://example.com/profile.png",
         raw: profile,
       },
     });
