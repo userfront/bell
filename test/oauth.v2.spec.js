@@ -1430,6 +1430,7 @@ describe("Bell v2", () => {
             name: "first tenant",
             eid: tenantId,
             googlePublicKey: clientId,
+            domain: "example.com",
           };
           return resolve(tenant);
         });
@@ -1443,6 +1444,7 @@ describe("Bell v2", () => {
         preAuthorizationHook: async (request, settings) => {
           const tenant = await mockDbLookup(request.query.tenant_id);
           settings.clientId = tenant.googlePublicKey;
+          settings.location = `https://${tenant.eid}.${tenant.domain}`;
         },
         provider: mock.provider,
       };
@@ -1463,10 +1465,15 @@ describe("Bell v2", () => {
 
       const res = await server.inject(`/login?tenant_id=${tenantId}`);
 
-      // Assert client ID was modified
+      // Assert client ID and location was modified
+      const protocol = encodeURIComponent("https://");
+      const domain = "example.com";
       expect(res.headers.location).to.contain(
-        mock.uri +
-          `/auth?client_id=${clientId}&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Flogin&state=`
+        `${mock.uri}/auth` +
+          `?client_id=${clientId}` +
+          `&response_type=code` +
+          `&redirect_uri=${protocol}${tenantId}.${domain}%2Flogin` +
+          `&state=`
       );
 
       // Assert preAuthorizationHook was called
